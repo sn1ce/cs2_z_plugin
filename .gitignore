@@ -1,0 +1,11 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+.vscode/
+.claude/
+*.swp
+# CS2 server runtime data (Docker bind mount)
+gameserver/data/

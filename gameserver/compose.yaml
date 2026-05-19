@@ -1,0 +1,53 @@
+services:
+  cs2:
+    image: joedwards32/cs2:latest
+    container_name: cs2-server
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    ports:
+      - "27015:27015/tcp"
+      - "27015:27015/udp"
+      - "27020:27020/udp"   # SourceTV
+    environment:
+      # ── Identity ────────────────────────────────────────────────────────
+      CS2_SERVERNAME: "Chef's CS2 Test Server"
+      CS2_PORT: "27015"
+
+      # ── Auth ────────────────────────────────────────────────────────────
+      # GSLT only needed for public listing. LAN mode below skips it entirely.
+      # Get one at https://steamcommunity.com/dev/managegameservers (App ID 730)
+      # SRCDS_TOKEN: ""
+
+      # LAN mode — 1 = LAN only, no Valve auth, perfect for plugin testing
+      CS2_LAN: "1"
+
+      # ── Passwords ───────────────────────────────────────────────────────
+      CS2_RCONPW: "CHANGE_ME_RCON"
+      CS2_PW: ""
+
+      # ── Gameplay ────────────────────────────────────────────────────────
+      CS2_MAXPLAYERS: "12"
+      CS2_GAMEALIAS: "casual"        # casual | competitive | wingman | deathmatch
+      CS2_STARTMAP: "de_dust2"
+      CS2_MAPGROUP: "mg_active"
+      CS2_BOT_QUOTA: "0"
+      CS2_CHEATS: "0"
+
+      # ── Stability ───────────────────────────────────────────────────────
+      CS2_SERVER_HIBERNATE: "0"      # MUST be 0 — hibernation crashes CS2
+
+      # ── SourceTV ────────────────────────────────────────────────────────
+      TV_ENABLE: "0"
+      TV_PORT: "27020"
+
+      # ── Validation on each container start ──────────────────────────────
+      STEAMAPPVALIDATE: "0"          # 1 = re-validate every restart (slower but safer)
+
+      # ── Debug ───────────────────────────────────────────────────────────
+      # 0 off, 1 steamcmd, 2 cs2, 3 all
+      DEBUG: "0"
+
+    volumes:
+      # All ~60GB of CS2 + plugins + configs live here, persisted across restarts
+      - ./data:/home/steam/cs2-dedicated

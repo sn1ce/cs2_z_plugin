@@ -1,0 +1,46 @@
+{
+    // First infection delay in seconds (after freezetime ends).
+    "FirstInfectionTimer": 15.0,
+
+    // Mother zombie ratio. Example: 21 players / 7 = 3 mother zombies.
+    "MotherZombieRatio": 7.0,
+
+    // Teleport mother zombie back to spawn after infection (Zombie Escape style).
+    "MotherZombieTeleport": false,
+
+    // Award cash on damage dealt to humans.
+    "CashOnDamage": false,
+
+    // When round timer expires: 0 = zombies win, 1 = humans win.
+    "TimeoutWinner": 1,
+
+    // Default class IDs (must match keys in classes.json).
+    "DefaultHumanBuffer": "human_default",
+    "DefaultZombieBuffer": "zombie_default",
+    "MotherZombieBuffer": "motherzombie",
+
+    // Random class assignment.
+    "RandomClassesOnConnect": false,
+    "RandomClassesOnSpawn": true,
+
+    // Weapon system master toggles.
+    "WeaponPurchaseEnable": true,
+    "WeaponRestrictEnable": true,
+    "WeaponBuyZoneOnly": false,
+
+    // !ztele teleport.
+    "TeleportAllow": true,
+    "TeleportUsesPerRound": 1,
+    "TeleportCooldownSeconds": 30.0,
+
+    // Respawn handling.
+    "RespawnEnable": true,
+    "RespawnDelay": 5.0,
+    "AllowRespawnJoinLate": false,
+    // 0 = zombie, 1 = human, 2 = pre-death team.
+    "RespawnTeam": 0,
+
+    // CSSharp limitation: per-class speed override often does not stick.
+    // Leave false until your build verifies it works.
+    "EnableClassSpeed": false
+}
