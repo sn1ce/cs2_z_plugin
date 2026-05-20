@@ -16,6 +16,8 @@ public sealed class ConfigService
         = new Dictionary<string, ClassConfig>();
     public IReadOnlyDictionary<string, HitgroupConfig> Hitgroups { get; private set; }
         = new Dictionary<string, HitgroupConfig>();
+    public IReadOnlyDictionary<string, PropConfig> Props { get; private set; }
+        = new Dictionary<string, PropConfig>();
 
     /// <summary>Weapon lookup keyed by entity name (e.g. <c>weapon_ak47</c>) — built at load time.</summary>
     public IReadOnlyDictionary<string, WeaponConfig> WeaponsByEntity { get; private set; }
@@ -46,11 +48,13 @@ public sealed class ConfigService
         var weapons  = LoadDict<WeaponConfig>("weapons.json");
         var classes  = LoadDict<ClassConfig>("classes.json");
         var hitgrp   = LoadDict<HitgroupConfig>("hitgroups.json");
+        var props    = LoadDict<PropConfig>("props.json");
 
         GameSettings = settings ?? new GameSettings();
         Weapons      = weapons;
         Classes      = classes;
         Hitgroups    = hitgrp;
+        Props        = props;
 
         WeaponsByEntity = BuildWeaponEntityIndex(Weapons);
         HitgroupsByIndex = Hitgroups.Values

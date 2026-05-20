@@ -9,6 +9,69 @@ services:
       - "27015:27015/tcp"
       - "27015:27015/udp"
       - "27020:27020/udp"   # SourceTV
+    # SRCDS_TOKEN + STEAM_API_KEY live in ./gameserver/.env (gitignored, never committed)
+    env_file:
+      - .env
+    environment:
+      # ── Identity ────────────────────────────────────────────────────────
+      CS2_SERVERNAME: "Chef's CS2 Test Server"
+      CS2_PORT: "27015"
+
+      # ── Auth ────────────────────────────────────────────────────────────
+      # GSLT comes from .env via env_file (SRCDS_TOKEN). LAN can stay on while
+      # we test — Workshop downloads go through Steam content servers and work
+      # in LAN mode as long as the GSLT/Web API key are present.
+      CS2_LAN: "1"
+
+      # ── Passwords ───────────────────────────────────────────────────────
+      CS2_RCONPW: "CHANGE_ME_RCON"
+      CS2_PW: ""
+
+      # ── Gameplay ────────────────────────────────────────────────────────
+      CS2_MAXPLAYERS: "12"
+      CS2_GAMEALIAS: "casual"        # casual | competitive | wingman | deathmatch
+      # Vanilla fallback (loaded if the workshop fetch below fails).
+      CS2_STARTMAP: "de_dust2"
+      # Workshop map zm_lila_epic_d — image runs `host_workshop_map` on container boot.
+      CS2_HOST_WORKSHOP_MAP: "3312510632"
+      CS2_MAPGROUP: "mg_active"
+      CS2_BOT_QUOTA: "0"
+      CS2_CHEATS: "1"
+
+      # ── Stability ───────────────────────────────────────────────────────
+      CS2_SERVER_HIBERNATE: "0"      # MUST be 0 — hibernation crashes CS2
+
+      # ── SourceTV ────────────────────────────────────────────────────────
+      TV_ENABLE: "0"
+      TV_PORT: "27020"
+
+      # ── Validation on each container start ──────────────────────────────
+      STEAMAPPVALIDATE: "0"          # 1 = re-validate every restart (slower but safer)
+
+      # ── Debug ───────────────────────────────────────────────────────────
+      # 0 off, 1 steamcmd, 2 cs2, 3 all
+      DEBUG: "0"
+
+    volumes:
+      # All ~60GB of CS2 + plugins + configs live here, persisted across restarts
+      - ./data:/home/steam/cs2-dedicated
+  cs22:
+    image: joedwards32/cs2:latest
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    dns:
+      - 172.22.0.2        # lancache-dns internal IP on lanchache_default
+    networks:
+      - lanchache_default
+    container_name: cs2-server2
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    ports:
+      - "27016:27015/tcp"
+      - "27016:27015/udp"
+      - "27021:27020/udp"   # SourceTV
     environment:
       # ── Identity ────────────────────────────────────────────────────────
       CS2_SERVERNAME: "Chef's CS2 Test Server"
@@ -32,7 +95,7 @@ services:
       CS2_STARTMAP: "de_dust2"
       CS2_MAPGROUP: "mg_active"
       CS2_BOT_QUOTA: "0"
-      CS2_CHEATS: "0"
+      CS2_CHEATS: "1"
 
       # ── Stability ───────────────────────────────────────────────────────
       CS2_SERVER_HIBERNATE: "0"      # MUST be 0 — hibernation crashes CS2
@@ -47,7 +110,10 @@ services:
       # ── Debug ───────────────────────────────────────────────────────────
       # 0 off, 1 steamcmd, 2 cs2, 3 all
       DEBUG: "0"
-
     volumes:
       # All ~60GB of CS2 + plugins + configs live here, persisted across restarts
-      - ./data:/home/steam/cs2-dedicated
+      - ./data2:/home/steam/cs2-dedicated
+
+networks:
+  lanchache_default:
+    external: true

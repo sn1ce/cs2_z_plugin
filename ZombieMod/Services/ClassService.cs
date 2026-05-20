@@ -1,3 +1,4 @@
+using System.Drawing;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Timers;
@@ -48,26 +49,28 @@ public sealed class ClassService
         StopRegenFor(slot);
 
         // Model + armor: defer one frame so entity props are settled.
+        // For Model="default" or empty, we leave CS2's stock agent assignment alone — picking a
+        // hardcoded vmdl path is fragile because the agent model layout changes each major patch.
         Server.NextFrame(() =>
         {
             if (!pawn.IsValid) return;
 
             if (!string.IsNullOrEmpty(cls.Model) && cls.Model != "default")
-            {
                 pawn.SetModel(cls.Model);
-            }
-            else
-            {
-                pawn.SetModel(cls.Team == 0
-                    ? "characters/models/tm_phoenix/tm_phoenix.vmdl"
-                    : "characters/models/ctm_sas/ctm_sas.vmdl");
-            }
 
             if (cls.Team == 0)
             {
                 pawn.ArmorValue = 0;
                 client.PawnHasHelmet = false;
             }
+            // Per-class render tint (from classes.json: RenderR/G/B).
+            pawn.Render = Color.FromArgb(255, cls.RenderR, cls.RenderG, cls.RenderB);
+            Utilities.SetStateChanged(pawn, "CBaseModelEntity", "m_clrRender");
+
+            // Per-class body scale (from classes.json: Scale).
+            var sceneNode = pawn.CBodyComponent?.SceneNode;
+            if (sceneNode is not null)
+                sceneNode.Scale = cls.Scale;
         });
 
         // Health: spawn code clobbers health at t=0, so apply after a beat.

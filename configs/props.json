@@ -1,0 +1,8 @@
+{
+    "traffic_cone":   { "Name": "Traffic Cone",     "Model": "models/de_overpass/construction/traffic_cone_1.vmdl",                       "Cost": 50  },
+    "cardboard_box":  { "Name": "Cardboard Box",    "Model": "models/cs_italy/props/box/cardboard_box_1.vmdl",                            "Cost": 100 },
+    "wooden_crate":   { "Name": "Wooden Crate",     "Model": "models/cs_italy/italy_crates/italy_wooden_crate_01.vmdl",                   "Cost": 200 },
+    "plastic_barrel": { "Name": "Plastic Barrel",   "Model": "models/de_overpass/construction/plastic_barrel/plastic_barrel_1.vmdl",     "Cost": 250 },
+    "wooden_barrel":  { "Name": "Wooden Barrel",    "Model": "models/cs_italy/props/barrel/italy_barrel_wood_1.vmdl",                     "Cost": 300 },
+    "barricade":      { "Name": "Wooden Barricade", "Model": "models/cs_italy/italy_barricade/italy_barricade.vmdl",                      "Cost": 500 }
+}

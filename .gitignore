@@ -9,3 +9,5 @@ obj/
 *.swp
 # CS2 server runtime data (Docker bind mount)
 gameserver/data/
+# Local-only secrets (GSLT, Steam API key)
+gameserver/.env

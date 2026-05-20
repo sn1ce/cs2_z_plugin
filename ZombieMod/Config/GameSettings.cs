@@ -32,6 +32,16 @@ public sealed record GameSettings
     /// <summary>0 = zombie, 1 = human, 2 = pre-death team.</summary>
     public int RespawnTeam { get; init; } = 0;
 
-    /// <summary>Per-class speed override; CSSharp limitation — keep false until verified working.</summary>
-    public bool EnableClassSpeed { get; init; } = false;
+    /// <summary>Per-class speed override (Speed in classes.json applied as VelocityModifier).</summary>
+    public bool EnableClassSpeed { get; init; } = true;
+
+    /// <summary>Rounds to play on a single map before rotating to the next entry in MapRotation.</summary>
+    public int MaxRoundsPerMap { get; init; } = 15;
+
+    /// <summary>
+    /// Maps to rotate through. Numeric strings are treated as Steam Workshop IDs (loaded via
+    /// <c>host_workshop_map</c>); anything else is treated as a vanilla map name (<c>changelevel</c>).
+    /// Empty means "stay on the current map forever".
+    /// </summary>
+    public IReadOnlyList<string> MapRotation { get; init; } = Array.Empty<string>();
 }

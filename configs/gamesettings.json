@@ -1,6 +1,6 @@
 {
     // First infection delay in seconds (after freezetime ends).
-    "FirstInfectionTimer": 15.0,
+    "FirstInfectionTimer": 1.0,
 
     // Mother zombie ratio. Example: 21 players / 7 = 3 mother zombies.
     "MotherZombieRatio": 7.0,
@@ -40,7 +40,15 @@
     // 0 = zombie, 1 = human, 2 = pre-death team.
     "RespawnTeam": 0,
 
-    // CSSharp limitation: per-class speed override often does not stick.
-    // Leave false until your build verifies it works.
-    "EnableClassSpeed": false
+    // Per-class speed override (Speed in classes.json). 250 = default CS2 speed; higher = faster.
+    // Flip false if you see weapon-attachment glitches that correlate with speed swaps.
+    "EnableClassSpeed": true,
+
+    // After this many rounds the plugin rotates to the next entry in MapRotation.
+    "MaxRoundsPerMap": 15,
+
+    // Map rotation. Numeric strings → Steam Workshop IDs (host_workshop_map),
+    // otherwise treated as vanilla map names (changelevel).
+    // Empty list = stay on the current map forever.
+    "MapRotation": [ "3312510632" ]
 }

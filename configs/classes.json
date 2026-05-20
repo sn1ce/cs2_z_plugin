@@ -10,32 +10,38 @@
         "Regen_Interval": 0,
         "Regen_Amount": 0,
         "Knockback": 0.0,
-        "Speed": 250.0
+        "Speed": 300.0,
+        "Scale": 1.0,
+        "RenderR": 255, "RenderG": 255, "RenderB": 255
     },
     "zombie_default": {
         "Name": "Default Zombie",
         "Enable": true,
         "Team": 0,
-        "Model": "characters/models/s2ze/zombie_frozen/zombie_frozen.vmdl",
+        "Model": "default",
         "MotherZombie": false,
         "NapalmTime": 5.0,
         "Health": 8000,
         "Regen_Interval": 10,
         "Regen_Amount": 100,
         "Knockback": 5.0,
-        "Speed": 250.0
+        "Speed": 300.0,
+        "Scale": 1.2,
+        "RenderR": 220, "RenderG": 40, "RenderB": 40
     },
     "motherzombie": {
         "Name": "Mother Zombie",
         "Enable": true,
         "Team": 0,
-        "Model": "characters/models/s2ze/bsi_zombie/zombie_bsi.vmdl",
+        "Model": "default",
         "MotherZombie": true,
         "NapalmTime": 5.0,
         "Health": 16000,
         "Regen_Interval": 10,
         "Regen_Amount": 100,
         "Knockback": 5.0,
-        "Speed": 250.0
+        "Speed": 300.0,
+        "Scale": 1.3,
+        "RenderR": 230, "RenderG": 25, "RenderB": 25
     }
 }

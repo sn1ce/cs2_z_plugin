@@ -1,10 +1,15 @@
+using System.Drawing;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Cvars;
+using CounterStrikeSharp.API.Modules.Entities;
+using CounterStrikeSharp.API.Modules.Entities.Constants;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using ZombieMod.Config;
 using ZombieMod.Models;
+using ZombieMod.Util;
 using CsTimer = CounterStrikeSharp.API.Modules.Timers.Timer;
 
 namespace ZombieMod.Services;
@@ -16,6 +21,7 @@ public sealed class InfectionService
 
     // Owned by InfectionService; other services reach state via the lookup helpers below.
     private readonly Dictionary<int, PlayerState> _players = new();
+
 
     // Reference back to plugin for timer creation. Set by plugin after construction.
     internal BasePlugin? Host { get; set; }
@@ -31,6 +37,10 @@ public sealed class InfectionService
 
     private CsTimer? _firstInfectionTimer;
     private CsTimer? _roundTimeoutTimer;
+    private CsTimer? _countdownTimer;
+    private int _countdownRemaining;
+    private int _roundsPlayed;
+    private int _mapRotationIdx;
     private bool _infectionStarted;
 
     public bool InfectionStarted => _infectionStarted;
@@ -91,6 +101,14 @@ public sealed class InfectionService
             return;
         }
 
+        // EventRoundFreezeEnd also fires for warmup rounds — skip so we don't run the infection
+        // countdown during the pre-match warmup.
+        if (GameRules.IsWarmup())
+        {
+            _logger.LogInformation("[Infection] FreezeEnd during warmup — skipping infection cycle.");
+            return;
+        }
+
         KillRoundTimers();
 
         var delay = MathF.Max(1.0f, _config.GameSettings.FirstInfectionTimer);
@@ -99,14 +117,94 @@ public sealed class InfectionService
             InfectMotherZombies,
             TimerFlags.STOP_ON_MAPCHANGE);
 
+        // Welcome banner + countdown to first infection.
+        Server.PrintToChatAll(" \x04[ZombieMod]\x01 this is zombiemod made by snice");
+        Server.PrintToChatAll($" \x04[ZombieMod]\x01 First infection in \x07{(int)delay}\x01 seconds…");
+
+        _countdownRemaining = (int)Math.Ceiling(delay);
+        _countdownTimer = Host.AddTimer(1.0f, () =>
+        {
+            if (_countdownRemaining <= 0)
+            {
+                _countdownTimer?.Kill();
+                _countdownTimer = null;
+                return;
+            }
+            foreach (var p in Utilities.GetPlayers())
+            {
+                if (p is null || !p.IsValid) continue;
+                if (p.Team is CsTeam.Spectator or CsTeam.None) continue;
+                p.PrintToCenter($"First infection in {_countdownRemaining}s");
+            }
+            _countdownRemaining--;
+        }, TimerFlags.REPEAT | TimerFlags.STOP_ON_MAPCHANGE);
+
+        // Round-timeout timer — if mp_roundtime expires without elimination, end the round in
+        // favour of the team configured by GameSettings.TimeoutWinner (0=zombies, 1=humans).
+        var mpRoundtime = ConVar.Find("mp_roundtime");
+        var roundtimeMinutes = mpRoundtime?.GetPrimitiveValue<float>() ?? 3.0f;
+        var roundtimeSec = MathF.Max(5f, roundtimeMinutes * 60f);
+        _roundTimeoutTimer = Host.AddTimer(roundtimeSec, OnRoundTimeout, TimerFlags.STOP_ON_MAPCHANGE);
+
         FireRoundStartHook?.Invoke();
-        _logger.LogInformation("[Infection] First infection in {Delay}s", delay);
+        _logger.LogInformation("[Infection] First infection in {Delay}s, round timeout in {RT}s",
+            delay, roundtimeSec);
+    }
+
+    private void OnRoundTimeout()
+    {
+        if (!_infectionStarted) return; // pre-infection: nothing to time out
+        var winner = _config.GameSettings.TimeoutWinner switch
+        {
+            0 => CsTeam.Terrorist,           // zombies win
+            1 => CsTeam.CounterTerrorist,    // humans win
+            _ => CsTeam.None,
+        };
+        _logger.LogInformation("[Infection] Round time expired — TimeoutWinner={W}", winner);
+        TerminateRound(winner);
     }
 
     public void OnRoundEnd()
     {
         KillRoundTimers();
         _infectionStarted = false;
+        _roundsPlayed++;
+
+        var maxRounds = _config.GameSettings.MaxRoundsPerMap;
+        _logger.LogInformation("[Map] Round {N} of {Max} ended.", _roundsPlayed, maxRounds);
+
+        if (maxRounds > 0 && _roundsPlayed >= maxRounds)
+            ScheduleMapRotation();
+    }
+
+    private void ScheduleMapRotation()
+    {
+        var rotation = _config.GameSettings.MapRotation;
+        if (rotation is null || rotation.Count == 0)
+        {
+            _logger.LogInformation("[Map] Rotation list empty — staying on current map.");
+            _roundsPlayed = 0;
+            return;
+        }
+
+        var next = rotation[_mapRotationIdx % rotation.Count];
+        _mapRotationIdx++;
+        _roundsPlayed = 0;
+
+        // Give the round-end screen ~8s to play before yanking everyone to the next map.
+        Host?.AddTimer(8.0f, () =>
+        {
+            if (long.TryParse(next, out _))
+            {
+                _logger.LogInformation("[Map] Rotating to workshop map {Id}", next);
+                Server.ExecuteCommand($"host_workshop_map {next}");
+            }
+            else
+            {
+                _logger.LogInformation("[Map] Rotating to vanilla map {Name}", next);
+                Server.ExecuteCommand($"changelevel {next}");
+            }
+        });
     }
 
     private void KillRoundTimers()
@@ -115,6 +213,8 @@ public sealed class InfectionService
         _firstInfectionTimer = null;
         _roundTimeoutTimer?.Kill();
         _roundTimeoutTimer = null;
+        _countdownTimer?.Kill();
+        _countdownTimer = null;
     }
 
     public void InfectMotherZombies()
@@ -136,7 +236,12 @@ public sealed class InfectionService
         var needed = Math.Max(1, (int)Math.Ceiling(alive.Count / ratio));
 
         var rng = new Random();
-        var chosen = alive.OrderBy(_ => rng.Next()).Take(needed).ToList();
+        // Prefer real players over bots — fall back to bots only if not enough humans alive.
+        var humans = alive.Where(p => !p.IsBot).OrderBy(_ => rng.Next()).ToList();
+        var bots   = alive.Where(p =>  p.IsBot).OrderBy(_ => rng.Next()).ToList();
+        var chosen = humans.Take(needed).ToList();
+        if (chosen.Count < needed)
+            chosen.AddRange(bots.Take(needed - chosen.Count));
 
         var vetoResult = FireMotherSelectedHook?.Invoke(chosen);
         if (vetoResult is HookResult.Stop)
@@ -184,6 +289,9 @@ public sealed class InfectionService
         if (client.Team != CsTeam.Terrorist)
             client.SwitchTeam(CsTeam.Terrorist);
 
+        // Zombies are melee-only — strip all weapons except the knife.
+        StripWeapons(client, keepKnife: true);
+
         var classId = motherZombie
             ? _config.GameSettings.MotherZombieBuffer
             : _config.GameSettings.DefaultZombieBuffer;
@@ -198,10 +306,138 @@ public sealed class InfectionService
             _logger.LogError("[Infection] Class '{Id}' missing from classes.json; cannot apply.", classId);
         }
 
+        // Zombie vision: clear the red human glow, then paint a dark-green zombie glow so
+        // zombies are visibly team-coded in spectate / kill-cam / through walls.
+        ApplyTeamGlow(client, ZombieMod.Models.TeamGlow.Zombie);
+
+        // Transition VFX/shake — fires for every infection (knife + mother + admin) so the
+        // newly-turned zombie always gets a clear "you changed" visual + camera kick.
+        FireInfectionEffect(client);
+        FireScreenShake(client);
+
         if (attacker is not null && attacker.IsValid)
             FakeInfectKillfeed(client, attacker);
 
+        // After a team-switch infect, CS2's native round-end check doesn't refire (no death
+        // event). Re-evaluate ourselves so the round ends when the last CT is infected.
+        Host?.AddTimer(0.2f, CheckRoundEndConditions);
+
         return HookResult.Continue;
+    }
+
+    /// <summary>
+    /// Apply a wall-piercing glow keyed off team — red for humans, dark green for zombies,
+    /// clear for neither. CS2's glow is broadcast to all clients so this is a team-coding
+    /// hint visible everywhere (kill-cam, spectate, through walls), not a per-viewer mask.
+    /// </summary>
+    private void ApplyTeamGlow(CCSPlayerController client, ZombieMod.Models.TeamGlow tint)
+    {
+        var slot = client.Slot;
+        Server.NextFrame(() =>
+        {
+            var fresh = Utilities.GetPlayerFromSlot(slot);
+            var pawn = fresh?.PlayerPawn.Value;
+            if (pawn is null || !pawn.IsValid) return;
+
+            try
+            {
+                switch (tint)
+                {
+                    case ZombieMod.Models.TeamGlow.Human:
+                        pawn.Glow.GlowColorOverride = Color.FromArgb(255, 255, 50, 50);
+                        pawn.Glow.GlowType = 3;
+                        pawn.Glow.GlowRange = 0;
+                        pawn.Glow.GlowRangeMin = 0;
+                        pawn.Glow.GlowTime = 0;
+                        break;
+                    case ZombieMod.Models.TeamGlow.Zombie:
+                        pawn.Glow.GlowColorOverride = Color.FromArgb(255, 30, 200, 30);
+                        pawn.Glow.GlowType = 3;
+                        pawn.Glow.GlowRange = 0;
+                        pawn.Glow.GlowRangeMin = 0;
+                        pawn.Glow.GlowTime = 0;
+                        break;
+                    case ZombieMod.Models.TeamGlow.None:
+                    default:
+                        pawn.Glow.GlowColorOverride = Color.FromArgb(0, 0, 0, 0);
+                        pawn.Glow.GlowType = 0;
+                        pawn.Glow.GlowRange = 0;
+                        break;
+                }
+                Utilities.SetStateChanged(pawn, "CBaseModelEntity", "m_Glow");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Glow] Set failed for {Name}", fresh?.PlayerName ?? "unknown");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Spawn a vanilla HE-grenade explosion particle at the victim's feet. Visual only — no
+    /// damage, no knockback. Fires for every infection (knife / mother / admin) so the player
+    /// always gets a clear "you turned" signal.
+    /// </summary>
+    private void FireInfectionEffect(CCSPlayerController victim)
+    {
+        var pawn = victim.PlayerPawn.Value;
+        var pos = pawn?.AbsOrigin;
+        if (pos is null || Host is null) return;
+
+        try
+        {
+            var particle = Utilities.CreateEntityByName<CParticleSystem>("info_particle_system");
+            if (particle is null) return;
+            particle.EffectName = "particles/explosions_fx/explosion_hegrenade.vpcf";
+            particle.Teleport(new Vector(pos.X, pos.Y, pos.Z + 16), new QAngle(), new Vector());
+            particle.DispatchSpawn();
+            particle.AcceptInput("Start");
+
+            // CS2's standard HE explode sound — emits from the victim so it spatializes correctly.
+            pawn!.EmitSound("BaseGrenade.Explode");
+
+            Host.AddTimer(2.0f, () =>
+            {
+                if (particle.IsValid) particle.Remove();
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Infection] Failed to spawn FX particle.");
+        }
+    }
+
+    /// <summary>
+    /// Spawn an <c>env_shake</c> at the victim's feet for a brief camera jolt. Radius is tight
+    /// so other players nearby get a faint kick but the victim feels the brunt of it.
+    /// </summary>
+    private void FireScreenShake(CCSPlayerController victim)
+    {
+        var pawn = victim.PlayerPawn.Value;
+        var pos = pawn?.AbsOrigin;
+        if (pos is null || Host is null) return;
+
+        try
+        {
+            var shake = Utilities.CreateEntityByName<CEnvShake>("env_shake");
+            if (shake is null) return;
+
+            shake.Amplitude = 12.0f;
+            shake.Frequency = 80.0f;
+            shake.Duration  = 0.8f;
+            shake.Radius    = 350.0f;
+
+            shake.DispatchSpawn();
+            shake.Teleport(new Vector(pos.X, pos.Y, pos.Z), new QAngle(), new Vector());
+            shake.AcceptInput("StartShake");
+
+            // Schedule safe destruction the same way we kill weapons — entity-IO "Kill".
+            shake.AddEntityIOEvent("Kill", shake, null, "", 2.0f);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Infection] Failed to spawn screen-shake.");
+        }
     }
 
     public void HumanizeClient(CCSPlayerController client, bool respawn)
@@ -230,6 +466,9 @@ public sealed class InfectionService
 
         if (respawn && !client.PawnIsAlive)
             client.Respawn();
+
+        // Zombie vision: light humans up so zombies (and themselves) see them through walls.
+        ApplyTeamGlow(client, ZombieMod.Models.TeamGlow.Human);
     }
 
     // ─── queries ──────────────────────────────────────────────────────────────
@@ -282,39 +521,128 @@ public sealed class InfectionService
             else aliveHumans++;
         }
 
-        if (aliveZombies == 0)
+        // Solo-session escape hatch: with only one player there's no meaningful "win"
+        // condition to fire. Skip the auto-terminate so the player can roam — the
+        // round-timeout timer (mp_roundtime * 60s) will reset naturally.
+        if (aliveZombies + aliveHumans <= 1)
+            return;
+
+        if (aliveZombies == 0 && aliveHumans > 0)
         {
             _logger.LogInformation("[Infection] Humans win — no zombies remain.");
-            TerminateRound(humansWin: true);
+            TerminateRound(CsTeam.CounterTerrorist);
         }
-        else if (aliveHumans == 0)
+        else if (aliveHumans == 0 && aliveZombies > 0)
         {
             _logger.LogInformation("[Infection] Zombies win — no humans remain.");
-            TerminateRound(humansWin: false);
+            TerminateRound(CsTeam.Terrorist);
         }
     }
 
-    private void TerminateRound(bool humansWin)
+    private void TerminateRound(CsTeam winner)
     {
-        // Note: TerminateRound on CCSGameRules is the clean path but the signature shifts between
-        // CSSharp versions. For now we slay the losing team — that triggers EventRoundEnd via the
-        // standard CS2 win-condition path. Phase 10 polish: switch to direct termination once we
-        // pin a known-good CSSharp signature.
-        var losingTeam = humansWin ? CsTeam.Terrorist : CsTeam.CounterTerrorist;
+        // Native CCSGameRules.TerminateRound() segfaults CS2 in single-player win scenarios
+        // (e.g. only one player, becomes mother zombie, immediately "wins"). Reproduces 100%.
+        // mp_restartgame is the soft path: same round-reset effect, no native crash.
+        UpdateTeamScore(winner);
+        AwardWinCash(winner, amount: 3250);
+
+        _logger.LogInformation("[Infection] Soft round restart for {Winner}.", winner);
+        Server.PrintToChatAll($" \x04[ZombieMod]\x01 Round over — {winner} wins. Restarting…");
+        Host?.AddTimer(3.0f, () => Server.ExecuteCommand("mp_restartgame 1"));
+    }
+
+    /// <summary>
+    /// CS2 normally awards round-win cash via the native win-condition pipeline; because we
+    /// force the round to terminate ourselves the payout doesn't fire, so we credit the winners
+    /// manually. Default $3250 matches the standard elimination bonus.
+    /// </summary>
+    private static void AwardWinCash(CsTeam winner, int amount)
+    {
+        if (winner is CsTeam.None or CsTeam.Spectator) return;
         foreach (var p in Utilities.GetPlayers())
         {
-            if (p is null || !p.IsValid || !p.PawnIsAlive) continue;
-            if (p.Team != losingTeam) continue;
-            p.PlayerPawn.Value?.CommitSuicide(false, true);
+            if (p is null || !p.IsValid) continue;
+            if (p.Team != winner) continue;
+            if (p.InGameMoneyServices is null) continue;
+            p.InGameMoneyServices.Account += amount;
+            Utilities.SetStateChanged(p, "CCSPlayerController", "m_pInGameMoneyServices");
         }
+    }
+
+    private static void UpdateTeamScore(CsTeam team, int delta = 1)
+    {
+        if (team == CsTeam.None || team == CsTeam.Spectator) return;
+        var teamManagers = Utilities.FindAllEntitiesByDesignerName<CCSTeam>("cs_team_manager");
+        foreach (var tm in teamManagers)
+        {
+            if ((int)team == tm.TeamNum)
+            {
+                tm.Score += delta;
+                Utilities.SetStateChanged(tm, "CTeam", "m_iScore");
+            }
+        }
+    }
+
+    private static void StripWeapons(CCSPlayerController client, bool keepKnife)
+    {
+        // Direct w.Remove() crashes CS2 with "WriteEnterPVS: GetEntServerClass failed" on the
+        // next net tick — the entity is freed but the player's inventory handle still references
+        // it. ZombieSharp's working pattern: set as active, DropActiveWeapon (removes from
+        // inventory cleanly), then schedule a deferred "Kill" entity-IO event for safe
+        // destruction through the engine's normal teardown path.
+        var slot = client.Slot;
+        Server.NextFrame(() =>
+        {
+            var fresh = Utilities.GetPlayerFromSlot(slot);
+            if (fresh is null || !fresh.IsValid) return;
+            var pawn = fresh.PlayerPawn.Value;
+            if (pawn?.WeaponServices is null) return;
+
+            var weapons = pawn.WeaponServices.MyWeapons.ToList();
+            foreach (var handle in weapons)
+            {
+                var w = handle.Value;
+                if (w is null || !w.IsValid) continue;
+                if (keepKnife && w.DesignerName.Contains("knife", StringComparison.OrdinalIgnoreCase)) continue;
+
+                try
+                {
+                    pawn.WeaponServices.ActiveWeapon.Raw = handle.Raw;
+                    fresh.DropActiveWeapon();
+                    w.AddEntityIOEvent("Kill", w, null, "", 0.5f);
+                }
+                catch
+                {
+                    // Entity may be mid-destruction by the engine — tolerate.
+                }
+            }
+        });
     }
 
     private void FakeInfectKillfeed(CCSPlayerController victim, CCSPlayerController attacker)
     {
-        // ZombieSharp fires a synthetic EventPlayerDeath here so the killfeed shows the infect.
-        // Skipping for the first cut — implement once Knockback/Class are in and we've confirmed
-        // the EventPlayerDeath constructor + FireEvent signature against current CSSharp.
-        _ = victim; _ = attacker;
+        try
+        {
+            // Fire a synthetic EventPlayerDeath so the killfeed shows "attacker [knife] victim".
+            // Our RespawnService guards on PawnIsAlive, so the re-entrant respawn schedule that
+            // CSSharp may dispatch back through our handler is a no-op (victim stays alive).
+            var death = new EventPlayerDeath(false);
+            death.Userid = victim;
+            death.Attacker = attacker;
+            death.Weapon = "knife";
+            death.FireEvent(false);
+
+            // Bump scoreboard kill/death counters so the infection counts as a real kill.
+            if (attacker.ActionTrackingServices is not null)
+                attacker.ActionTrackingServices.MatchStats.Kills += 1;
+            if (victim.ActionTrackingServices is not null)
+                victim.ActionTrackingServices.MatchStats.Deaths += 1;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Infection] FakeInfectKillfeed failed.");
+        }
     }
 
     private PlayerState GetOrCreateState(CCSPlayerController client)

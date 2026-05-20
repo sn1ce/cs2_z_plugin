@@ -95,4 +95,21 @@ public sealed class TeleportService
             state.SpawnAngle = null;
         }
     }
+
+    /// <summary>Teleport to spawn, bypassing the per-round uses + cooldown limits. For unstuck.</summary>
+    public bool UnstuckClient(CCSPlayerController client, out string? denyReason)
+    {
+        denyReason = null;
+        if (!client.IsValid || !client.PawnIsAlive) { denyReason = "You must be alive."; return false; }
+        var state = _infection.GetState(client);
+        if (state?.SpawnPosition is null || state.SpawnAngle is null)
+        {
+            denyReason = "No spawn position recorded yet — try after the next round start.";
+            return false;
+        }
+        var pawn = client.PlayerPawn.Value;
+        if (pawn is null) { denyReason = "No pawn."; return false; }
+        pawn.Teleport(state.SpawnPosition, state.SpawnAngle, new Vector(0, 0, 0));
+        return true;
+    }
 }
