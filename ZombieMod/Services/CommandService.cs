@@ -155,7 +155,6 @@ public sealed class CommandService
             else
                 client.PrintToChat($" \x04[ZombieMod]\x01 {reason}");
         });
-        menu.AddItem("Try a zombie model", (client, _) => OpenModelMenu(client));
         menu.AddItem("Open class picker", (client, _) =>
             client.PrintToChat(" \x04[ZombieMod]\x01 Class picker is a TODO — try !zclass."));
         menu.AddItem("Show commands", (client, _) =>
@@ -165,72 +164,9 @@ public sealed class CommandService
             client.PrintToChat("   !ztele — teleport to spawn (uses/cooldown limited)");
             client.PrintToChat("   !zspawn — respawn (when dead)");
             client.PrintToChat("   !prop — spawn props from a menu");
-            client.PrintToChat("   !zmodels — model rotator (test which ones work)");
             client.PrintToChat("   Buy commands: !ak !awp !deagle !p90 etc.");
         });
         menu.Display(caller, 0);
     }
 
-    public void HandleZModels(CCSPlayerController? caller, CommandInfo info) => OpenModelMenu(caller);
-
-    /// <summary>
-    /// Model rotator — covers workshop zombie packs (S2ZE, NOZB1) plus the vanilla heavy
-    /// variants and a sampling of every base T/CT agent family. Pick one, see if the model
-    /// renders and weapons attach correctly, then report back which ones work.
-    /// </summary>
-    private void OpenModelMenu(CCSPlayerController? caller)
-    {
-        if (caller is null || !caller.IsValid || Host is null) return;
-
-        var paths = new[]
-        {
-            // Reset
-            ("[Reset] Default (respawn to apply)", "default"),
-            // Workshop zombie packs (purpose-built zombie models, mounted via MAM)
-            ("[Workshop] S2ZE  zombie_frozen", "characters/models/s2ze/zombie_frozen/zombie_frozen.vmdl"),
-            ("[Workshop] S2ZE  chris_walker",  "characters/models/s2ze/chris_walker/chris_walker.vmdl"),
-            ("[Workshop] NOZB1 zombie_officer", "characters/models/nozb1/zombie_officer_player_model/zombie_officer_player_model.vmdl"),
-            // Vanilla "heavy" agents — supposedly the safest swaps per CSSharp plugin lore
-            ("[Vanilla] ctm_heavy",          "characters/models/ctm_heavy/ctm_heavy.vmdl"),
-            ("[Vanilla] tm_phoenix_heavy",   "characters/models/tm_phoenix_heavy/tm_phoenix_heavy.vmdl"),
-            // T-side base + variants
-            ("[Vanilla T] tm_phoenix (base)",          "characters/models/tm_phoenix/tm_phoenix.vmdl"),
-            ("[Vanilla T] tm_phoenix_variantg",        "characters/models/tm_phoenix/tm_phoenix_variantg.vmdl"),
-            ("[Vanilla T] tm_balkan_variantf",         "characters/models/tm_balkan/tm_balkan_variantf.vmdl"),
-            ("[Vanilla T] tm_leet_varianta",           "characters/models/tm_leet/tm_leet_varianta.vmdl"),
-            ("[Vanilla T] tm_jumpsuit_varianta",       "characters/models/tm_jumpsuit/tm_jumpsuit_varianta.vmdl"),
-            ("[Vanilla T] tm_jungle_raider_varianta",  "characters/models/tm_jungle_raider/tm_jungle_raider_varianta.vmdl"),
-            // CT-side base + variants
-            ("[Vanilla CT] ctm_sas (base)",           "characters/models/ctm_sas/ctm_sas.vmdl"),
-            ("[Vanilla CT] ctm_sas_variantf",         "characters/models/ctm_sas/ctm_sas_variantf.vmdl"),
-            ("[Vanilla CT] ctm_fbi (base)",           "characters/models/ctm_fbi/ctm_fbi.vmdl"),
-            ("[Vanilla CT] ctm_st6_variantg",         "characters/models/ctm_st6/ctm_st6_variantg.vmdl"),
-            ("[Vanilla CT] ctm_swat_variante",        "characters/models/ctm_swat/ctm_swat_variante.vmdl"),
-            ("[Vanilla CT] ctm_diver_varianta",       "characters/models/ctm_diver/ctm_diver_varianta.vmdl"),
-        };
-
-        var menu = new WasdMenu("Model rotator — pick one to try", Host);
-        foreach (var (label, path) in paths)
-        {
-            var capturedPath = path;
-            menu.AddItem(label, (client, _) =>
-            {
-                if (capturedPath == "default")
-                {
-                    client.PrintToChat($" \x04[ZombieMod]\x01 Default — die + respawn to reset.");
-                    return;
-                }
-                var pawn = client.PlayerPawn.Value;
-                if (pawn is null) return;
-                // Spawn-order-safe SetModel: defer one frame so the entity is settled.
-                Server.NextFrame(() =>
-                {
-                    if (!pawn.IsValid) return;
-                    pawn.SetModel(capturedPath);
-                    client.PrintToChat($" \x04[ZombieMod]\x01 Model: {capturedPath}");
-                });
-            });
-        }
-        menu.Display(caller, 0);
-    }
 }

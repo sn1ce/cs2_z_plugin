@@ -541,15 +541,30 @@ public sealed class InfectionService
 
     private void TerminateRound(CsTeam winner)
     {
-        // Native CCSGameRules.TerminateRound() segfaults CS2 in single-player win scenarios
-        // (e.g. only one player, becomes mother zombie, immediately "wins"). Reproduces 100%.
-        // mp_restartgame is the soft path: same round-reset effect, no native crash.
+        // CheckRoundEndConditions guards against the alive<=1 segfault case before we ever
+        // get here, so the native gameRules.TerminateRound path is safe now. Using it instead
+        // of mp_restartgame because mp_restartgame resets all scores (breaks the scoreboard)
+        // AND doesn't truly respawn pawns (our SetModel zombie override persists, so all
+        // post-restart players visually stay zombies). Native termination does both correctly.
+        var gameRules = ZombieMod.Util.GameRules.Get();
+        if (gameRules is null)
+        {
+            _logger.LogError("[Infection] Cannot terminate round: game rules entity not found.");
+            return;
+        }
+
+        var reason = winner switch
+        {
+            CsTeam.Terrorist => RoundEndReason.TerroristsWin,
+            CsTeam.CounterTerrorist => RoundEndReason.CTsWin,
+            _ => RoundEndReason.RoundDraw,
+        };
+
+        _logger.LogInformation("[Infection] Round won by {Winner}.", winner);
+        Server.PrintToChatAll($" \x04[ZombieMod]\x01 Round over — {winner} wins.");
+        gameRules.TerminateRound(5f, reason);
         UpdateTeamScore(winner);
         AwardWinCash(winner, amount: 3250);
-
-        _logger.LogInformation("[Infection] Soft round restart for {Winner}.", winner);
-        Server.PrintToChatAll($" \x04[ZombieMod]\x01 Round over — {winner} wins. Restarting…");
-        Host?.AddTimer(3.0f, () => Server.ExecuteCommand("mp_restartgame 1"));
     }
 
     /// <summary>
@@ -583,6 +598,9 @@ public sealed class InfectionService
             }
         }
     }
+
+    /// <summary>Public entry point for the plugin's <c>EventItemPickup</c> handler.</summary>
+    public void StripWeaponsKeepKnife(CCSPlayerController client) => StripWeapons(client, keepKnife: true);
 
     private static void StripWeapons(CCSPlayerController client, bool keepKnife)
     {

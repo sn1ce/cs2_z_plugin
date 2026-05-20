@@ -104,16 +104,6 @@ public sealed class ZombieModPlugin : BasePlugin
                 { manifest.AddResource(prop.Model); n++; }
             }
 
-            // Every body model the !zmodels rotator can pick.
-            foreach (var path in TestModelPaths)
-            { manifest.AddResource(path); n++; }
-
-            // Companion arms models for workshop zombie packs. cs2-store / RootS confirms
-            // arms must be precached separately from the body even though we don't always set
-            // them at runtime — the engine refuses to resolve the body model otherwise.
-            foreach (var path in TestArmsModelPaths)
-            { manifest.AddResource(path); n++; }
-
             Logger.LogInformation("[Precache] OnServerPrecacheResources fired — added {N} resources", n);
         });
 
@@ -131,26 +121,6 @@ public sealed class ZombieModPlugin : BasePlugin
         Logger.LogInformation(
             "ZombieMod {Version} loaded (hotReload={HotReload}, configDir={Dir})",
             ModuleVersion, hotReload, configDir);
-
-        // One-shot self-reload to force a precache pass with our manifest registered.
-        if (!_initialPrecacheReloadFired)
-        {
-            _initialPrecacheReloadFired = true;
-            var firstMap = Config.GameSettings.MapRotation.FirstOrDefault();
-            if (!string.IsNullOrEmpty(firstMap))
-            {
-                AddTimer(10.0f, () =>
-                {
-                    Logger.LogInformation(
-                        "[Precache] One-shot self-reload to {Map} so OnServerPrecacheResources actually fires.",
-                        firstMap);
-                    if (long.TryParse(firstMap, out _))
-                        Server.ExecuteCommand($"host_workshop_map {firstMap}");
-                    else
-                        Server.ExecuteCommand($"changelevel {firstMap}");
-                });
-            }
-        }
     }
 
     // ─── event handlers ───────────────────────────────────────────────────────
@@ -231,6 +201,20 @@ public sealed class ZombieModPlugin : BasePlugin
     }
 
     [GameEventHandler]
+    public HookResult OnItemPickup(EventItemPickup @event, GameEventInfo info)
+    {
+        var client = @event.Userid;
+        if (client is null || !client.IsValid) return HookResult.Continue;
+        if (!Infection.IsClientInfected(client)) return HookResult.Continue;
+        if (@event.Item is null) return HookResult.Continue;
+        if (@event.Item.Contains("knife", StringComparison.OrdinalIgnoreCase)) return HookResult.Continue;
+
+        // Zombie picked up a gun — strip the inventory back down to the knife.
+        Infection.StripWeaponsKeepKnife(client);
+        return HookResult.Continue;
+    }
+
+    [GameEventHandler]
     public HookResult OnPlayerTeam(EventPlayerTeam @event, GameEventInfo info)
     {
         if (@event.Isbot) return HookResult.Continue;
@@ -285,11 +269,6 @@ public sealed class ZombieModPlugin : BasePlugin
     public void Cmd_ZHelp(CCSPlayerController? caller, CommandInfo info)
         => Commands.HandleZHelp(caller, info);
 
-    [ConsoleCommand("css_zmodels", "Open the model rotator — try different player models.")]
-    [CommandHelper(0, "", CommandUsage.CLIENT_ONLY)]
-    public void Cmd_ZModels(CCSPlayerController? caller, CommandInfo info)
-        => Commands.HandleZModels(caller, info);
-
     [ConsoleCommand("css_prop", "Open the prop-spawn menu (costs in-game cash).")]
     [CommandHelper(0, "", CommandUsage.CLIENT_ONLY)]
     public void Cmd_Prop(CCSPlayerController? caller, CommandInfo info)
@@ -320,52 +299,6 @@ public sealed class ZombieModPlugin : BasePlugin
     private string ResolveAddonsDir()
         => Path.GetFullPath(Path.Combine(ModuleDirectory, "..", "..", ".."));
 
-    /// <summary>
-    /// Every model path the <c>!zmodels</c> rotator can pick — registered in the precache
-    /// manifest so SetModel can actually resolve them instead of rendering ERROR.
-    /// Keep in sync with <see cref="ZombieMod.Services.CommandService"/>'s OpenModelMenu list.
-    /// </summary>
-    internal static readonly string[] TestModelPaths =
-    {
-        "characters/models/s2ze/zombie_frozen/zombie_frozen.vmdl",
-        "characters/models/s2ze/chris_walker/chris_walker.vmdl",
-        "characters/models/nozb1/zombie_officer_player_model/zombie_officer_player_model.vmdl",
-        "characters/models/ctm_heavy/ctm_heavy.vmdl",
-        "characters/models/tm_phoenix_heavy/tm_phoenix_heavy.vmdl",
-        "characters/models/tm_phoenix/tm_phoenix.vmdl",
-        "characters/models/tm_phoenix/tm_phoenix_variantg.vmdl",
-        "characters/models/tm_balkan/tm_balkan_variantf.vmdl",
-        "characters/models/tm_leet/tm_leet_varianta.vmdl",
-        "characters/models/tm_jumpsuit/tm_jumpsuit_varianta.vmdl",
-        "characters/models/tm_jungle_raider/tm_jungle_raider_varianta.vmdl",
-        "characters/models/ctm_sas/ctm_sas.vmdl",
-        "characters/models/ctm_sas/ctm_sas_variantf.vmdl",
-        "characters/models/ctm_fbi/ctm_fbi.vmdl",
-        "characters/models/ctm_st6/ctm_st6_variantg.vmdl",
-        "characters/models/ctm_swat/ctm_swat_variante.vmdl",
-        "characters/models/ctm_diver/ctm_diver_varianta.vmdl",
-    };
-
-    /// <summary>
-    /// Arms-model siblings for the workshop zombie packs. cs2-store author RootS confirms
-    /// these must also be in the manifest even if we don't override the player's arms.
-    /// </summary>
-    internal static readonly string[] TestArmsModelPaths =
-    {
-        "characters/models/s2ze/zombie_frozen/zombie_frozen_arms.vmdl",
-        "characters/models/s2ze/chris_walker/chris_walker_arms.vmdl",
-        "characters/models/nozb1/zombie_officer_player_model/zombie_officer_pm_arm.vmdl",
-    };
-
-    /// <summary>
-    /// Self-reload guard. CS2's initial <c>+host_workshop_map</c> precache phase runs BEFORE
-    /// CSSharp plugins finish loading, so our manifest entries miss the first map.
-    /// On first plugin Load per process we issue one programmatic map reload — that cycle
-    /// hits our listener and actually precaches the resources. Static survives plugin reloads
-    /// within the same process so we only reload once per container start.
-    /// </summary>
-    private static bool _initialPrecacheReloadFired;
-
     private static readonly string[] RequiredCvars =
     [
         "mp_limitteams 0",
@@ -381,14 +314,18 @@ public sealed class ZombieModPlugin : BasePlugin
         // SwitchTeam them to T, which makes CS2 see 0 CTs alive and end the round naturally.
         // Setting this to 1 (ZombieSharp's default) breaks that detection.
         "mp_ignore_round_win_conditions 0",
-        // Disable warmup — gameplay starts immediately on map load.
+        // Disable warmup as aggressively as we can — casual mode's gamemode cfg re-enables
+        // pausetimer, so we need to clear it explicitly each map start.
         "mp_warmuptime 0",
+        "mp_warmup_pausetimer 0",
+        "mp_warmup_offline_enabled 0",
         // Short freezetime for faster testing iteration.
         "mp_freezetime 1",
         // Bots: fill the server so workshop maps populate without players. Override your
         // compose's CS2_BOT_QUOTA=0; the cvar set runs after the image's startup.
-        "bot_quota_mode fill",
-        "bot_quota 10",
+        // Always 2 bots regardless of human count — gives a default testing buddy on solo.
+        "bot_quota_mode normal",
+        "bot_quota 2",
         "bot_join_after_player 0",
         // Cheats on by default so dev can use `thirdperson`, noclip, etc.
         // Overrides the image's CS2_CHEATS=0 startup arg — plugin applies after.
@@ -418,25 +355,38 @@ public sealed class ZombieModPlugin : BasePlugin
     }
 
     private CounterStrikeSharp.API.Modules.Timers.Timer? _warmupKiller;
+    private int _warmupKillerTicks;
 
     /// <summary>
-    /// Spam <c>mp_warmup_end</c> on a 2-second cadence as long as CS2 reports warmup is active.
-    /// Self-stops once <see cref="GameRules.IsWarmup"/> returns false.
+    /// Beat warmup down. <c>mp_warmup_end</c> alone is unreliable in casual mode (gamemode cfg
+    /// keeps re-arming pausetimer), so we also unfreeze the timer, zero the duration, and
+    /// finally fall back to a hard <c>mp_restartgame 1</c> if WarmupPeriod is still true after
+    /// a handful of attempts.
     /// </summary>
     private void EnsureWarmupEnded()
     {
         _warmupKiller?.Kill();
+        _warmupKillerTicks = 0;
         _warmupKiller = AddTimer(2.0f, () =>
         {
-            if (Util.GameRules.IsWarmup())
-            {
-                Server.ExecuteCommand("mp_warmup_end");
-                Server.ExecuteCommand("mp_warmuptime 0");
-            }
-            else
+            if (!Util.GameRules.IsWarmup())
             {
                 _warmupKiller?.Kill();
                 _warmupKiller = null;
+                return;
+            }
+
+            _warmupKillerTicks++;
+            Server.ExecuteCommand("mp_warmup_pausetimer 0");
+            Server.ExecuteCommand("mp_warmuptime 0");
+            Server.ExecuteCommand("mp_warmup_end");
+
+            // After 5 cadence ticks (~10s) of warmup still being on, force-restart the game.
+            // mp_restartgame 1 cleanly bounces the round and bypasses any stuck warmup state.
+            if (_warmupKillerTicks == 5)
+            {
+                Logger.LogWarning("[Warmup] Stuck after {N} ticks — falling back to mp_restartgame 1.", _warmupKillerTicks);
+                Server.ExecuteCommand("mp_restartgame 1");
             }
         }, CounterStrikeSharp.API.Modules.Timers.TimerFlags.REPEAT
          | CounterStrikeSharp.API.Modules.Timers.TimerFlags.STOP_ON_MAPCHANGE);

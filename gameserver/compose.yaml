@@ -30,12 +30,11 @@ services:
       # ── Gameplay ────────────────────────────────────────────────────────
       CS2_MAXPLAYERS: "12"
       CS2_GAMEALIAS: "casual"        # casual | competitive | wingman | deathmatch
-      # Vanilla fallback (loaded if the workshop fetch below fails).
+      # Default to vanilla dust2 — fast load, working bot navmesh, no workshop fetch.
       CS2_STARTMAP: "de_dust2"
-      # Workshop map zm_lila_epic_d — image runs `host_workshop_map` on container boot.
-      CS2_HOST_WORKSHOP_MAP: "3312510632"
+      # CS2_HOST_WORKSHOP_MAP: ""   # uncomment + set a workshop ID to start on that map
       CS2_MAPGROUP: "mg_active"
-      CS2_BOT_QUOTA: "0"
+      CS2_BOT_QUOTA: "2"
       CS2_CHEATS: "1"
 
       # ── Stability ───────────────────────────────────────────────────────
