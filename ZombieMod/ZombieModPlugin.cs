@@ -32,6 +32,7 @@ public sealed class ZombieModPlugin : BasePlugin
     internal KnockbackService Knockback { get; private set; } = null!;
     internal CommandService Commands { get; private set; } = null!;
     internal PropService Props { get; private set; } = null!;
+    internal SoundService Sounds { get; private set; } = null!;
     internal KnockbackProviderDetector KnockbackDetector { get; private set; } = null!;
     internal ZombieModApi Api { get; private set; } = null!;
 
@@ -52,17 +53,24 @@ public sealed class ZombieModPlugin : BasePlugin
         Respawn   = new RespawnService(Logger, Config, Infection) { Host = this };
         Teleport  = new TeleportService(Logger, Config, Infection);
         Props     = new PropService(Logger, Config);
+        Sounds    = new SoundService(Logger, Config.Sounds);
         Commands  = new CommandService(Logger, Config, Infection, Respawn, Classes, Teleport, Weapons, Props) { Host = this };
 
         Api = new ZombieModApi(Infection, Classes);
 
         // Wire service → API event-firing. Internal callers do the firing; external API calls
         // route straight to the service (which fires) so events never raise twice.
-        Infection.FireInfectHook         = Api.RaiseClientInfect;
+        Infection.FireInfectHook         = (c, a, m, f) =>
+        {
+            Sounds.Broadcast(m ? "mother_zombie" : "infect");
+            return Api.RaiseClientInfect(c, a, m, f);
+        };
         Infection.FireHumanizeHook       = Api.RaiseClientHumanize;
         Infection.FireMotherSelectedHook = Api.RaiseMotherZombieSelected;
         Infection.FireRoundStartHook     = Api.RaiseZombieRoundStart;
         Infection.ApplyClassHook         = (c, cls) => Classes.ApplyClass(c, cls);
+
+        ScheduleZombieIdleSounds();
 
         Capabilities.RegisterPluginCapability(Capability, () => Api);
 
@@ -77,8 +85,10 @@ public sealed class ZombieModPlugin : BasePlugin
         {
             ApplyRequiredCvars();
             EnsureWarmupEnded();
-            AddTimer(5.0f, () => Server.ExecuteCommand("sv_cheats 1"));
-            AddTimer(15.0f, () => Server.ExecuteCommand("sv_cheats 1"));
+            // sv_cheats + buy cvars get clobbered by casual's gamemode_server.cfg AFTER our
+            // OnMapStart applies them. Re-apply on a delay so our values stick.
+            AddTimer(5.0f, () => ApplyRequiredCvars());
+            AddTimer(15.0f, () => ApplyRequiredCvars());
 
             // Precache happens via the OnServerPrecacheResources listener (manifest.AddResource).
             // Earlier hidden-dummy hack didn't pin anything — verified via deep research against
@@ -105,6 +115,34 @@ public sealed class ZombieModPlugin : BasePlugin
             }
 
             Logger.LogInformation("[Precache] OnServerPrecacheResources fired — added {N} resources", n);
+        });
+
+        // Per-weapon Clip + Reserve must be applied at entity-creation time. Hooking
+        // EventItemPickup is too late — CS2's pickup logic overrides our writes.
+        RegisterListener<OnEntityCreated>(entity =>
+        {
+            if (entity is null || !entity.IsValid) return;
+            if (!entity.DesignerName.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase)) return;
+            if (entity.DesignerName.Contains("knife", StringComparison.OrdinalIgnoreCase)) return;
+
+            var name = entity.DesignerName;
+            if (!Config.WeaponsByEntity.TryGetValue(name, out var cfg)) return;
+
+            Server.NextFrame(() =>
+            {
+                if (!entity.IsValid) return;
+                var weapon = new CCSWeaponBase(entity.Handle);
+                if (!weapon.IsValid || weapon.VData is null) return;
+
+                var clipTarget = cfg.Clip > 0 ? cfg.Clip : weapon.VData.MaxClip1 * 2;
+                if (clipTarget > 0)
+                {
+                    if (weapon.VData.MaxClip1 < clipTarget) weapon.VData.MaxClip1 = clipTarget;
+                    if (weapon.Clip1 < clipTarget) weapon.Clip1 = clipTarget;
+                }
+                // Reserve handled by sv_infinite_ammo 2 — see RequiredCvars note.
+                Utilities.SetStateChanged(weapon, "CBasePlayerWeapon", "m_iClip1");
+            });
         });
 
         RegisterListener<OnClientPutInServer>(slot =>
@@ -137,6 +175,9 @@ public sealed class ZombieModPlugin : BasePlugin
     public HookResult OnRoundFreezeEnd(EventRoundFreezeEnd @event, GameEventInfo info)
     {
         Infection.OnRoundFreezeEnd();
+        // Kick off the round-long ambient track. OnRoundEnd already calls
+        // Sounds.StopAllForEveryone(), so this one cuts cleanly at round end.
+        Sounds.Broadcast("round_ambient");
         return HookResult.Continue;
     }
 
@@ -144,6 +185,8 @@ public sealed class ZombieModPlugin : BasePlugin
     public HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
     {
         Infection.OnRoundEnd();
+        // Kill any in-flight ambient music track so it doesn't bleed into post-round/freezetime.
+        Sounds.StopAllForEveryone();
         return HookResult.Continue;
     }
 
@@ -173,6 +216,7 @@ public sealed class ZombieModPlugin : BasePlugin
         {
             Classes.OnPlayerDeath(victim);
             Respawn.ScheduleRespawn(victim);
+            Sounds.Broadcast(Infection.IsClientInfected(victim) ? "zombie_death" : "human_death");
         }
         return HookResult.Continue;
     }
@@ -205,12 +249,14 @@ public sealed class ZombieModPlugin : BasePlugin
     {
         var client = @event.Userid;
         if (client is null || !client.IsValid) return HookResult.Continue;
-        if (!Infection.IsClientInfected(client)) return HookResult.Continue;
-        if (@event.Item is null) return HookResult.Continue;
-        if (@event.Item.Contains("knife", StringComparison.OrdinalIgnoreCase)) return HookResult.Continue;
 
-        // Zombie picked up a gun — strip the inventory back down to the knife.
-        Infection.StripWeaponsKeepKnife(client);
+        // Zombies: strip non-knife pickups. (Ammo/clip applied via OnEntityCreated above.)
+        if (Infection.IsClientInfected(client)
+            && @event.Item is not null
+            && !@event.Item.Contains("knife", StringComparison.OrdinalIgnoreCase))
+        {
+            Infection.StripWeaponsKeepKnife(client);
+        }
         return HookResult.Continue;
     }
 
@@ -274,6 +320,12 @@ public sealed class ZombieModPlugin : BasePlugin
     public void Cmd_Prop(CCSPlayerController? caller, CommandInfo info)
         => Commands.HandleProp(caller, info);
 
+    [ConsoleCommand("css_admin", "Open the ZombieMod admin panel (root admins only).")]
+    [CommandHelper(0, "", CommandUsage.CLIENT_ONLY)]
+    [RequiresPermissions("@css/root")]
+    public void Cmd_Admin(CCSPlayerController? caller, CommandInfo info)
+        => Commands.HandleAdmin(caller, info);
+
     // ─── config resolution ────────────────────────────────────────────────────
 
     /// <summary>
@@ -301,6 +353,10 @@ public sealed class ZombieModPlugin : BasePlugin
 
     private static readonly string[] RequiredCvars =
     [
+        // Pin to Casual. changelevel without args inherits current game_type/game_mode, and
+        // something (workshop map cfg? gamemode_server.cfg?) flips us into Deathmatch otherwise.
+        "game_type 0",
+        "game_mode 0",
         "mp_limitteams 0",
         "mp_autoteambalance 0",
         "mp_disconnect_kills_players 1",
@@ -321,6 +377,11 @@ public sealed class ZombieModPlugin : BasePlugin
         "mp_warmup_offline_enabled 0",
         // Short freezetime for faster testing iteration.
         "mp_freezetime 1",
+        // Round time (minutes).
+        "mp_roundtime 4",
+        // Infinite spare ammo (mode 2). Mag still depletes → reload mechanic preserved, but
+        // the reserve never runs dry. Reload pauses give zombies the tactical opening.
+        "sv_infinite_ammo 2",
         // Bots: fill the server so workshop maps populate without players. Override your
         // compose's CS2_BOT_QUOTA=0; the cvar set runs after the image's startup.
         // Always 2 bots regardless of human count — gives a default testing buddy on solo.
@@ -332,6 +393,9 @@ public sealed class ZombieModPlugin : BasePlugin
         "sv_cheats 1",
         // Start money per spawn — lets players afford props/weapons immediately.
         "mp_startmoney 4000",
+        // Buy anywhere on the map (not just in the buyzone), but only for the first 50s.
+        "mp_buy_anywhere 1",
+        "mp_buytime 50",
         // Disable CS2's own match-end pipeline. The plugin owns map rotation via
         // GameSettings.MapRotation + MaxRoundsPerMap (see InfectionService.OnRoundEnd), so we
         // never want CS2 to auto-LOOPDEACTIVATE on its own round-count trigger.
@@ -347,6 +411,37 @@ public sealed class ZombieModPlugin : BasePlugin
         //  prof_dumpoverrun was removed/renamed. Lives in the log noise for now.)
         "developer 0",
     ];
+
+    private readonly Random _idleRng = new();
+
+    /// <summary>
+    /// Ambient zombie voice loop. Every 15–25s we broadcast one of the short GFL idle clips
+    /// from sounds.json["zombie_idle"], provided ≥1 alive zombie is on the server and the
+    /// round is active. Cadence assumes 1–2s clips — bump back to 60s+ if we ever wire long
+    /// music tracks back in.
+    /// </summary>
+    private void ScheduleZombieIdleSounds()
+    {
+        var delay = 15.0f + (float)(_idleRng.NextDouble() * 10.0);
+        AddTimer(delay, () =>
+        {
+            try
+            {
+                // Only broadcast music if a round is actually in progress — otherwise the track
+                // bleeds into the post-round / freezetime screens and won't stop.
+                if (Infection.RoundActive)
+                {
+                    var zombies = Utilities.GetPlayers()
+                        .Where(p => p is { IsValid: true } && p.PawnIsAlive && Infection.IsClientInfected(p))
+                        .ToList();
+                    if (zombies.Count > 0)
+                        Sounds.Broadcast("zombie_idle");
+                }
+            }
+            catch { /* don't let one bad tick kill the loop */ }
+            ScheduleZombieIdleSounds();
+        });
+    }
 
     private void ApplyRequiredCvars()
     {

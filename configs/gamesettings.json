@@ -1,6 +1,12 @@
 {
     // First infection delay in seconds (after freezetime ends).
-    "FirstInfectionTimer": 1.0,
+    "FirstInfectionTimer": 15.0,
+
+    // Cash floor at round start — players below this get topped up, players above keep theirs.
+    "StartMoney": 4000,
+
+    // Cash bonus awarded to a zombie on each successful knife-infect.
+    "InfectKillReward": 500,
 
     // Mother zombie ratio. Example: 21 players / 7 = 3 mother zombies.
     "MotherZombieRatio": 7.0,

@@ -1,6 +1,8 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Utils;
 using CS2MenuManager.API.Menu;
 using Microsoft.Extensions.Logging;
 
@@ -40,13 +42,22 @@ public sealed class CommandService
         _props = props;
     }
 
-    public void HandleProp(CCSPlayerController? caller, CommandInfo info)
+    public void HandleProp(CCSPlayerController? caller, CommandInfo info) => OpenPropMenu(caller, null);
+
+    private void OpenPropMenu(CCSPlayerController? caller, string? focusKey)
     {
         if (caller is null || !caller.IsValid || Host is null) return;
         var account = caller.InGameMoneyServices?.Account ?? 0;
         var menu = new WasdMenu($"Props — You have ${account}", Host);
-        foreach (var (key, prop) in _config.Props.OrderBy(p => p.Value.Cost))
+
+        var ordered = _config.Props.OrderBy(p => p.Value.Cost).ToList();
+        var startIdx = 0;
+
+        for (var i = 0; i < ordered.Count; i++)
         {
+            var (key, prop) = ordered[i];
+            if (focusKey is not null && key == focusKey) startIdx = i;
+
             var capturedKey = key;
             var capturedProp = prop;
             var canAfford = account >= prop.Cost;
@@ -59,9 +70,11 @@ public sealed class CommandService
                     client.PrintToChat($" \x04[ZombieMod]\x01 Spawned {capturedProp.Name} (-${capturedProp.Cost}).");
                 else
                     client.PrintToChat($" \x04[ZombieMod]\x01 {reason}");
+                // Keep the menu open AND remember which item was selected so cursor doesn't snap to top.
+                Host?.AddTimer(0.1f, () => OpenPropMenu(client, capturedKey));
             });
         }
-        menu.Display(caller, 0);
+        menu.Display(caller, startIdx);
     }
 
     public void HandleInfect(CCSPlayerController? caller, CommandInfo info)
@@ -142,6 +155,50 @@ public sealed class CommandService
             info.ReplyToCommand(" [ZombieMod] Teleported.");
         else
             info.ReplyToCommand($" [ZombieMod] {reason}");
+    }
+
+    public void HandleAdmin(CCSPlayerController? caller, CommandInfo info)
+    {
+        if (caller is null || !caller.IsValid || Host is null) return;
+        if (!AdminManager.PlayerHasPermissions(caller, "@css/root"))
+        {
+            info.ReplyToCommand(" [ZombieMod] You are not an admin.");
+            return;
+        }
+
+        var menu = new WasdMenu("Admin Panel", Host);
+        menu.AddItem("Restart Round", (client, _) =>
+        {
+            Server.ExecuteCommand("mp_restartgame 1");
+            client.PrintToChat(" \x04[ZombieMod]\x01 Round restarting…");
+        });
+        menu.AddItem("End Round — Humans Win", (client, _) =>
+        {
+            _infection.ForceEndRound(CsTeam.CounterTerrorist);
+            client.PrintToChat(" \x04[ZombieMod]\x01 Forced humans win.");
+        });
+        menu.AddItem("End Round — Zombies Win", (client, _) =>
+        {
+            _infection.ForceEndRound(CsTeam.Terrorist);
+            client.PrintToChat(" \x04[ZombieMod]\x01 Forced zombies win.");
+        });
+        menu.AddItem("Reload Configs", (client, _) =>
+        {
+            _config.Reload();
+            client.PrintToChat(" \x04[ZombieMod]\x01 Configs reloaded.");
+        });
+        menu.AddItem("Skip to Next Map", (client, _) =>
+        {
+            _infection.ForceMapRotation();
+            client.PrintToChat(" \x04[ZombieMod]\x01 Rotating to next map…");
+        });
+        menu.AddItem("End Warmup Now", (client, _) =>
+        {
+            Server.ExecuteCommand("mp_warmup_end");
+            Server.ExecuteCommand("mp_warmup_pausetimer 0");
+            client.PrintToChat(" \x04[ZombieMod]\x01 Warmup ended.");
+        });
+        menu.Display(caller, 0);
     }
 
     public void HandleZHelp(CCSPlayerController? caller, CommandInfo info)

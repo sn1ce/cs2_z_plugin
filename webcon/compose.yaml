@@ -1,0 +1,29 @@
+services:
+  webcon:
+    build: .
+    container_name: cs2-webcon
+    restart: unless-stopped
+    ports:
+      - "8088:8000"
+    env_file:
+      - .env
+    environment:
+      SERVERS_CONFIG: /config/servers.json
+      # .env mounted into the container so add/edit can append new
+      # RCON_PASSWORD_<ID> keys without a rebuild.
+      ENV_FILE: /config/.env
+    volumes:
+      # Read-only docker socket so we can stream cs2-server logs.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Server list config — read-write so the dashboard can add/edit/remove
+      # entries from the UI itself.
+      - ./servers.json:/config/servers.json:rw
+      # .env file — read-write so newly-added servers can have their password
+      # persisted alongside the existing keys.
+      - ./.env:/config/.env:rw
+    networks:
+      - gameserver_default
+
+networks:
+  gameserver_default:
+    external: true

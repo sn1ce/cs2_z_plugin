@@ -1,0 +1,67 @@
+{
+    // Each event has "Volume" (advisory — playvol is a no-op stub in CS2) and "Files".
+    // Paths relative to csgo/, no leading slash, .vsnd extension (no _c).
+    // Sources mounted via MAM:
+    //   - 3160448201 = GFL ZE Content (zombie idle voices fallback)
+    //   - 3730087911 = Zombiemod Sounds (custom pack: ambient + screams + bite)
+    // Live-reload via "css_zreload".
+
+    // Ambient track — restarts on every OnRoundFreezeEnd. Loops on the client until
+    // OnRoundEnd issues "stopsound" so it never bleeds into post-round/freezetime.
+    "round_ambient": {
+        "Volume": 0.5,
+        "Files": [
+            "sounds/zombie_event_ambient_sound.vsnd"
+        ]
+    },
+
+    // Mother zombie selection at round start — 2 random screams from the custom pack.
+    "mother_zombie": {
+        "Volume": 0.5,
+        "Files": [
+            "sounds/zombie_event_random_scream.vsnd",
+            "sounds/zombie_event_random_scream_1.vsnd"
+        ]
+    },
+
+    // Zombie death — short groans from GFL.
+    "zombie_death": {
+        "Volume": 0.5,
+        "Files": [
+            "sounds/zr/zombie_die1.vsnd",
+            "sounds/zr/zombie_die2.vsnd",
+            "sounds/zr/zombie_die3.vsnd"
+        ]
+    },
+
+    // Idle ambient — short GFL zombie voices, 15-25s cadence. The "round_ambient"
+    // above is the long looping track; "zombie_idle" is the occasional groan layer.
+    "zombie_idle": {
+        "Volume": 0.5,
+        "Files": [
+            "sounds/zr/zombie_voice_idle1.vsnd",
+            "sounds/zr/zombie_voice_idle2.vsnd",
+            "sounds/zr/zombie_voice_idle3.vsnd",
+            "sounds/zr/zombie_voice_idle4.vsnd",
+            "sounds/zr/zombie_voice_idle5.vsnd",
+            "sounds/zr/zombie_voice_idle6.vsnd",
+            "sounds/zr/zombie_voice_idle7.vsnd",
+            "sounds/zr/zombie_voice_idle8.vsnd",
+            "sounds/zr/zombie_voice_idle9.vsnd",
+            "sounds/zr/zombie_voice_idle10.vsnd",
+            "sounds/zr/zombie_voice_idle11.vsnd",
+            "sounds/zr/zombie_voice_idle12.vsnd",
+            "sounds/zr/zombie_voice_idle13.vsnd",
+            "sounds/zr/zombie_voice_idle14.vsnd"
+        ]
+    },
+
+    // Bite — zombie killed a human (knife kill or knife-infect). Fires on OnPlayerDeath
+    // when victim was NOT a zombie at time of death.
+    "human_death": {
+        "Volume": 0.5,
+        "Files": [
+            "sounds/zombie_event_bite_scream.vsnd"
+        ]
+    }
+}

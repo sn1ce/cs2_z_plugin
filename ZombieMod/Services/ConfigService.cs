@@ -18,6 +18,7 @@ public sealed class ConfigService
         = new Dictionary<string, HitgroupConfig>();
     public IReadOnlyDictionary<string, PropConfig> Props { get; private set; }
         = new Dictionary<string, PropConfig>();
+    public SoundConfig Sounds { get; private set; } = new();
 
     /// <summary>Weapon lookup keyed by entity name (e.g. <c>weapon_ak47</c>) — built at load time.</summary>
     public IReadOnlyDictionary<string, WeaponConfig> WeaponsByEntity { get; private set; }
@@ -49,12 +50,14 @@ public sealed class ConfigService
         var classes  = LoadDict<ClassConfig>("classes.json");
         var hitgrp   = LoadDict<HitgroupConfig>("hitgroups.json");
         var props    = LoadDict<PropConfig>("props.json");
+        var sounds   = LoadSounds("sounds.json");
 
         GameSettings = settings ?? new GameSettings();
         Weapons      = weapons;
         Classes      = classes;
         Hitgroups    = hitgrp;
         Props        = props;
+        Sounds       = sounds;
 
         WeaponsByEntity = BuildWeaponEntityIndex(Weapons);
         HitgroupsByIndex = Hitgroups.Values
@@ -129,6 +132,15 @@ public sealed class ConfigService
             _logger.LogError(ex, "[Config] {File}: unexpected load error", filename);
             return new Dictionary<string, T>();
         }
+    }
+
+    private SoundConfig LoadSounds(string filename)
+    {
+        var dict = LoadDict<SoundEntry>(filename);
+        return new SoundConfig
+        {
+            Events = dict.ToDictionary(kv => kv.Key, kv => kv.Value),
+        };
     }
 
     private static IReadOnlyDictionary<string, WeaponConfig> BuildWeaponEntityIndex(

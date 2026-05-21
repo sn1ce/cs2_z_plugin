@@ -9,5 +9,9 @@ obj/
 *.swp
 # CS2 server runtime data (Docker bind mount)
 gameserver/data/
-# Local-only secrets (GSLT, Steam API key)
+# Local-only secrets (GSLT, Steam API key, RCON password, web tokens)
+**/.env
 gameserver/.env
+webcon/.env
+# Webcon Docker writes here at runtime
+webcon/servers.json

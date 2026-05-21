@@ -35,6 +35,13 @@ public sealed record GameSettings
     /// <summary>Per-class speed override (Speed in classes.json applied as VelocityModifier).</summary>
     public bool EnableClassSpeed { get; init; } = true;
 
+    /// <summary>Cash floor at the start of each round. Players with less get bumped up to this.
+    /// Players with more keep what they earned.</summary>
+    public int StartMoney { get; init; } = 4000;
+
+    /// <summary>Cash awarded to a zombie attacker on a successful knife-infect.</summary>
+    public int InfectKillReward { get; init; } = 500;
+
     /// <summary>Rounds to play on a single map before rotating to the next entry in MapRotation.</summary>
     public int MaxRoundsPerMap { get; init; } = 15;
 

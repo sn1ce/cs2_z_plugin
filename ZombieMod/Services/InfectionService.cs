@@ -70,10 +70,15 @@ public sealed class InfectionService
 
     // ─── round lifecycle ──────────────────────────────────────────────────────
 
+    /// <summary>True between OnRoundStart and OnRoundEnd. Used to gate background music
+    /// so it stops the moment the round ends instead of bleeding into post-round / next freezetime.</summary>
+    public bool RoundActive { get; private set; }
+
     public void OnRoundStart()
     {
         KillRoundTimers();
         _infectionStarted = false;
+        RoundActive = true;
 
         foreach (var p in _players.Values)
         {
@@ -83,6 +88,7 @@ public sealed class InfectionService
             p.ResetForRound();
         }
 
+        var startMoney = _config.GameSettings.StartMoney;
         // Auto-shuffle all alive/team-assigned players to CT so the infection starts even.
         foreach (var player in Utilities.GetPlayers())
         {
@@ -90,6 +96,31 @@ public sealed class InfectionService
             if (player.Team is CsTeam.Spectator or CsTeam.None) continue;
             if (player.Team != CsTeam.CounterTerrorist)
                 player.SwitchTeam(CsTeam.CounterTerrorist);
+        }
+
+        // Reset cash to StartMoney — but defer it so we run AFTER casual mode's gamemode cfg
+        // sets its own mp_startmoney-derived account value. Without the delay, our set is
+        // immediately overridden back to ~$1000. We fire at 0.5s and again at 2s to be safe.
+        if (startMoney > 0)
+        {
+            Host?.AddTimer(0.5f, () => ApplyStartMoney(startMoney));
+            Host?.AddTimer(2.0f, () => ApplyStartMoney(startMoney));
+        }
+    }
+
+    private static void ApplyStartMoney(int floor)
+    {
+        foreach (var p in Utilities.GetPlayers())
+        {
+            if (p is null || !p.IsValid) continue;
+            if (p.Team is CsTeam.Spectator or CsTeam.None) continue;
+            if (p.InGameMoneyServices is null) continue;
+            // Only top up — don't clobber money the player earned during the previous round.
+            if (p.InGameMoneyServices.Account < floor)
+            {
+                p.InGameMoneyServices.Account = floor;
+                Utilities.SetStateChanged(p, "CCSPlayerController", "m_pInGameMoneyServices");
+            }
         }
     }
 
@@ -121,9 +152,15 @@ public sealed class InfectionService
         Server.PrintToChatAll(" \x04[ZombieMod]\x01 this is zombiemod made by snice");
         Server.PrintToChatAll($" \x04[ZombieMod]\x01 First infection in \x07{(int)delay}\x01 seconds…");
 
+        // Decrement BEFORE printing so the displayed value reflects actual seconds remaining:
+        //   t=1s → "14s"  (14 seconds until infection)
+        //   ...
+        //   t=14s → "1s"  (1 second until infection)
+        //   t=15s → infection fires (countdown stops at "1s" — no flash of "0s" or "1s at fire").
         _countdownRemaining = (int)Math.Ceiling(delay);
         _countdownTimer = Host.AddTimer(1.0f, () =>
         {
+            _countdownRemaining--;
             if (_countdownRemaining <= 0)
             {
                 _countdownTimer?.Kill();
@@ -136,7 +173,6 @@ public sealed class InfectionService
                 if (p.Team is CsTeam.Spectator or CsTeam.None) continue;
                 p.PrintToCenter($"First infection in {_countdownRemaining}s");
             }
-            _countdownRemaining--;
         }, TimerFlags.REPEAT | TimerFlags.STOP_ON_MAPCHANGE);
 
         // Round-timeout timer — if mp_roundtime expires without elimination, end the round in
@@ -168,6 +204,7 @@ public sealed class InfectionService
     {
         KillRoundTimers();
         _infectionStarted = false;
+        RoundActive = false;
         _roundsPlayed++;
 
         var maxRounds = _config.GameSettings.MaxRoundsPerMap;
@@ -316,7 +353,17 @@ public sealed class InfectionService
         FireScreenShake(client);
 
         if (attacker is not null && attacker.IsValid)
+        {
             FakeInfectKillfeed(client, attacker);
+            // Award the zombie cash for a successful infect — CS2's native kill bonus never
+            // fires for us since the victim doesn't actually die (we just team-switch them).
+            var reward = _config.GameSettings.InfectKillReward;
+            if (reward > 0 && attacker.InGameMoneyServices is not null)
+            {
+                attacker.InGameMoneyServices.Account += reward;
+                Utilities.SetStateChanged(attacker, "CCSPlayerController", "m_pInGameMoneyServices");
+            }
+        }
 
         // After a team-switch infect, CS2's native round-end check doesn't refire (no death
         // event). Re-evaluate ourselves so the round ends when the last CT is infected.
@@ -393,8 +440,8 @@ public sealed class InfectionService
             particle.DispatchSpawn();
             particle.AcceptInput("Start");
 
-            // CS2's standard HE explode sound — emits from the victim so it spatializes correctly.
-            pawn!.EmitSound("BaseGrenade.Explode");
+            // (Visual only — the HE explode sound used to fire here, but we replaced it with the
+            // proper zombie_infect scream broadcast from SoundService via FireInfectHook.)
 
             Host.AddTimer(2.0f, () =>
             {
@@ -538,6 +585,9 @@ public sealed class InfectionService
             TerminateRound(CsTeam.Terrorist);
         }
     }
+
+    public void ForceEndRound(CsTeam winner) => TerminateRound(winner);
+    public void ForceMapRotation() => ScheduleMapRotation();
 
     private void TerminateRound(CsTeam winner)
     {

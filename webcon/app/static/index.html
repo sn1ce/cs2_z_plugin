@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#050505" />
+  <title>CS2 WebCon</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- Ambient background layers (grid + corner glow + scanlines) -->
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-glow" aria-hidden="true"></div>
+  <div class="bg-scan" aria-hidden="true"></div>
+
+  <!-- SVG icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <!-- Brand mark: angular HUD-style hex reticle -->
+      <symbol id="i-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2.5 21 7v10l-9 4.5L3 17V7z"/>
+        <path d="M12 7.5v9"/>
+        <path d="M7.5 9.5l9 5"/>
+        <path d="M16.5 9.5l-9 5"/>
+        <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/>
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14M5 12h14"/>
+      </symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 0 1-15.5 6.4L3 16"/>
+        <path d="M3 12a9 9 0 0 1 15.5-6.4L21 8"/>
+        <path d="M21 3v5h-5"/>
+        <path d="M3 21v-5h5"/>
+      </symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/>
+        <path d="M10 17l5-5-5-5"/>
+        <path d="M15 12H3"/>
+      </symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9"/>
+        <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+      </symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18"/>
+        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6M14 11v6"/>
+      </symbol>
+      <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 18l-6-6 6-6"/>
+      </symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 6l6 6-6 6"/>
+      </symbol>
+      <symbol id="i-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <path d="M12 9v4"/>
+        <path d="M12 17h.01"/>
+      </symbol>
+      <symbol id="i-server-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 3l18 18"/>
+        <path d="M22 12V7a2 2 0 0 0-2-2H8"/>
+        <path d="M2 7a2 2 0 0 1 2-2"/>
+        <path d="M22 17v-1"/>
+        <path d="M22 22H4a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2h12"/>
+        <path d="M6 18h.01"/>
+        <path d="M6 10h.01"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- Token gate -->
+  <div id="auth" class="auth">
+    <form id="auth-form" class="auth-card" autocomplete="off">
+      <div class="auth-grid-deco" aria-hidden="true"></div>
+      <div class="auth-brand">
+        <svg class="icon icon-brand" aria-hidden="true"><use href="#i-brand"/></svg>
+        <span class="wordmark">CS2 / WEBCON</span>
+      </div>
+      <div class="auth-sub">
+        <span class="auth-sub-bar" aria-hidden="true"></span>
+        SECURE NODE ACCESS
+      </div>
+      <label class="field">
+        <span class="field-label">ACCESS TOKEN</span>
+        <input id="token" name="token" type="password" class="input input-mono" autofocus required spellcheck="false" autocomplete="off" />
+        <span class="field-help">Stored in session memory only — never persisted.</span>
+      </label>
+      <button type="submit" class="btn btn-primary btn-block">
+        <span>JACK IN</span>
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+      </button>
+      <div class="auth-foot">
+        <span class="auth-foot-code">// node-0x01 // counter-strike 2 rcon bridge</span>
+      </div>
+    </form>
+  </div>
+
+  <!-- Dashboard view -->
+  <div id="dashboard" class="dashboard hidden">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="brand">
+          <svg class="icon icon-brand" aria-hidden="true"><use href="#i-brand"/></svg>
+          <span class="wordmark">CS2 / WEBCON</span>
+        </span>
+        <span class="crumb-sep" aria-hidden="true"></span>
+        <span class="crumb">DASHBOARD</span>
+      </div>
+      <div class="topbar-right">
+        <button id="dash-add" type="button" class="btn btn-primary">
+          <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+          <span>ADD SERVER</span>
+        </button>
+        <button id="dash-refresh" type="button" class="btn btn-ghost-text" title="Refresh">
+          <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+          <span>SYNC</span>
+        </button>
+        <button id="dash-logout" type="button" class="btn btn-ghost-text" title="Logout">
+          <svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg>
+          <span>LOGOUT</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="dash-section">
+      <h2 class="section-title">
+        <span class="section-marker" aria-hidden="true"></span>
+        <span>NODES</span>
+        <span class="section-meta" id="servers-count">// LOADING</span>
+      </h2>
+      <section class="cards" id="cards" aria-live="polite"><!-- populated by JS --></section>
+    </section>
+
+    <section class="dash-section">
+      <h2 class="section-title">
+        <span class="section-marker" aria-hidden="true"></span>
+        <span>COMMAND BRIDGE</span>
+        <span class="section-meta">// BROADCAST FAN-OUT</span>
+      </h2>
+      <section class="broadcast panel">
+        <div class="panel-corner panel-corner-tl" aria-hidden="true"></div>
+        <div class="panel-corner panel-corner-br" aria-hidden="true"></div>
+
+        <div class="broadcast-head">
+          <div class="block-title">QUICK ACTIONS</div>
+          <div class="block-sub">Commands relay to every configured node simultaneously.</div>
+        </div>
+        <div class="quick">
+          <button class="btn btn-ghost" data-cmd="mp_restartgame 1">RESTART ROUND</button>
+          <button class="btn btn-ghost" data-cmd="status">STATUS</button>
+          <button class="btn btn-ghost" data-cmd="mp_warmup_end">END WARMUP</button>
+          <div class="workshop-group">
+            <div class="input-shell">
+              <input id="bc-workshop" type="text" inputmode="numeric" pattern="\d+"
+                     class="input input-mono input-workshop" placeholder="WORKSHOP ID" />
+              <span class="input-suffix">ID</span>
+            </div>
+            <button id="bc-workshop-btn" type="button" class="btn btn-ghost" disabled>CHANGE MAP</button>
+          </div>
+        </div>
+        <div class="panel-divider" aria-hidden="true"></div>
+        <pre id="bc-log" class="log log-broadcast" data-empty="// AWAITING BROADCAST OUTPUT"></pre>
+        <form id="bc-form" class="prompt-row">
+          <span class="prompt-glyph" aria-hidden="true">&gt;_</span>
+          <input id="bc-cmd" class="prompt-input input-mono" autocomplete="off"
+                 placeholder="broadcast command…" />
+        </form>
+      </section>
+    </section>
+  </div>
+
+  <!-- Per-server console -->
+  <div id="console" class="console hidden">
+    <header class="topbar console-topbar">
+      <div class="topbar-left">
+        <a href="/" class="btn btn-ghost-text" id="back-dash" aria-label="Back to dashboard">
+          <svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>
+          <span>DASHBOARD</span>
+        </a>
+        <span class="crumb-sep" aria-hidden="true"></span>
+        <span class="server-meta">
+          <span id="server-label" class="server-label-text"></span>
+          <span class="server-id input-mono" id="server-id-line"></span>
+        </span>
+      </div>
+      <div class="topbar-right">
+        <span id="status" class="pill pill-disconnected">
+          <span class="pill-dot" aria-hidden="true"></span>
+          <span>DISCONNECTED</span>
+        </span>
+      </div>
+      <div class="topbar-quick">
+        <div class="quick quick-scroll">
+          <button class="btn btn-ghost" data-cmd="mp_restartgame 1">RESTART ROUND</button>
+          <button class="btn btn-ghost" data-cmd="changelevel de_dust2">→ DE_DUST2</button>
+          <button class="btn btn-ghost" data-cmd="css_zreload">CSS_ZRELOAD</button>
+          <button class="btn btn-ghost" data-cmd="status">STATUS</button>
+          <button class="btn btn-ghost" data-cmd="mp_warmup_end">END WARMUP</button>
+          <div class="workshop-group">
+            <div class="input-shell">
+              <input id="ws-workshop" type="text" inputmode="numeric" pattern="\d+"
+                     class="input input-mono input-workshop" placeholder="WORKSHOP ID" />
+              <span class="input-suffix">ID</span>
+            </div>
+            <button id="ws-workshop-btn" type="button" class="btn btn-ghost" disabled>CHANGE MAP</button>
+          </div>
+          <button id="clear" type="button" class="btn btn-ghost btn-clear">CLEAR</button>
+        </div>
+      </div>
+    </header>
+    <pre id="log" class="log log-console"></pre>
+    <form id="input-form" class="prompt-row prompt-row-console">
+      <span class="prompt-glyph" aria-hidden="true">&gt;_</span>
+      <input id="cmd" name="cmd" class="prompt-input input-mono" autocomplete="off"
+             placeholder="type an rcon command (↑/↓ for history)" />
+    </form>
+  </div>
+
+  <!-- Add / edit server modal -->
+  <div id="server-modal" class="modal hidden" role="dialog" aria-modal="true"
+       aria-labelledby="server-modal-title" aria-hidden="true">
+    <div class="modal-card panel">
+      <div class="panel-corner panel-corner-tl" aria-hidden="true"></div>
+      <div class="panel-corner panel-corner-br" aria-hidden="true"></div>
+      <header class="modal-head">
+        <span class="modal-title-wrap">
+          <svg class="icon icon-brand" aria-hidden="true"><use href="#i-brand"/></svg>
+          <span id="server-modal-title" class="modal-title">ADD SERVER</span>
+        </span>
+        <button type="button" id="server-modal-close" class="icon-btn" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <form id="server-form" class="modal-body" autocomplete="off">
+        <label class="field">
+          <span class="field-label">ID</span>
+          <input id="sf-id" name="id" class="input input-mono" required pattern="[a-z0-9][a-z0-9_\-]*" />
+          <span class="field-help">lowercase, digits, '-' or '_'</span>
+        </label>
+        <label class="field">
+          <span class="field-label">LABEL</span>
+          <input id="sf-label" name="label" class="input" />
+        </label>
+        <label class="field">
+          <span class="field-label">RCON HOST</span>
+          <input id="sf-host" name="rcon_host" class="input input-mono" required />
+        </label>
+        <label class="field">
+          <span class="field-label">RCON PORT</span>
+          <input id="sf-port" name="rcon_port" class="input input-mono" type="number" min="1" max="65535" value="27015" required />
+        </label>
+        <label class="field">
+          <span class="field-label">LOG CONTAINER</span>
+          <input id="sf-log" name="log_container" class="input input-mono" required />
+        </label>
+        <label class="field">
+          <span class="field-label">PASSWORD</span>
+          <input id="sf-password" name="password" class="input input-mono" type="password" autocomplete="new-password" />
+          <span id="sf-pwd-hint" class="field-help hidden">leave blank to keep current</span>
+        </label>
+        <div id="server-modal-error" class="modal-error hidden">
+          <svg class="icon" aria-hidden="true"><use href="#i-warning"/></svg>
+          <span class="modal-error-text"></span>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="server-modal-cancel" class="btn btn-ghost-text">CANCEL</button>
+          <button type="submit" id="server-modal-save" class="btn btn-primary">SAVE</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

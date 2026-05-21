@@ -10,4 +10,10 @@ public sealed record WeaponConfig
     public int MaxPurchase { get; init; } = 0;
     public bool Restrict { get; init; } = false;
     public IReadOnlyList<string> PurchaseCommand { get; init; } = Array.Empty<string>();
+
+    /// <summary>Magazine size override. 0 = auto-double the vanilla CS2 MaxClip1.</summary>
+    public int Clip { get; init; }
+
+    /// <summary>Reserve ammo override. 0 = leave vanilla CS2 default.</summary>
+    public int Reserve { get; init; }
 }

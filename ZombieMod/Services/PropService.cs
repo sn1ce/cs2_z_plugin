@@ -1,5 +1,6 @@
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Entities.Constants;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using ZombieMod.Config;
@@ -77,18 +78,33 @@ public sealed class PropService
 
         try
         {
-            // Spawn order matters: CS2's model resolver requires the entity to be fully spawned
-            // before SetModel is called (CS2-Parachute / CS2PropHunt pattern). Reversing the
-            // order or using `prop_physics_override` instead of `_multiplayer` renders ERROR.
+            // Physics-correct spawn order: SetModel BEFORE DispatchSpawn so the engine builds
+            // the VPHYSICS collision hull from the model. With model-after-spawn the entity
+            // ends up with no physics body → prop floats in mid-air. Position before spawn
+            // too so initial bounding box overlaps with proper world. EnableMotion + Wake
+            // kick off simulation immediately so the prop falls + responds to bullets.
             var entity = Utilities.CreateEntityByName<CPhysicsPropMultiplayer>("prop_physics_multiplayer");
             if (entity is null)
             {
                 denyReason = "Engine refused to create the prop.";
                 return false;
             }
-            entity.DispatchSpawn();
-            entity.Teleport(spawnPos, new QAngle(), new Vector());
             entity.SetModel(prop.Model);
+            entity.Teleport(spawnPos, new QAngle(), new Vector());
+            entity.DispatchSpawn();
+
+            // Default for prop_physics_multiplayer is COLLISION_GROUP_PUSHAWAY (20) — props
+            // can be pushed but players walk THROUGH them. COLLISION_GROUP_PROPS (24) is the
+            // canonical "solid prop, blocks players" group.
+            entity.Collision.CollisionGroup = (byte)CollisionGroup.COLLISION_GROUP_PROPS;
+            entity.Collision.CollisionAttribute.CollisionGroup = (byte)CollisionGroup.COLLISION_GROUP_PROPS;
+            Utilities.SetStateChanged(entity, "CBaseEntity", "m_Collision");
+
+            entity.MoveType = MoveType_t.MOVETYPE_VPHYSICS;
+            entity.AcceptInput("EnableMotion");
+            entity.AcceptInput("Wake");
+            // Tiny downward nudge to settle the physics body.
+            entity.Teleport(spawnPos, new QAngle(), new Vector(0, 0, -1));
 
             // Deduct cost
             if (client.InGameMoneyServices is not null)
