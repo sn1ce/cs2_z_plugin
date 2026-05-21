@@ -1,153 +1,169 @@
 # ZombieMod for Counter-Strike 2
 
-A classic infection / survival zombie game mode for **Counter-Strike 2** dedicated servers,
-implemented as a [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp) plugin
-with JSON-only configuration. Target: Linux dedicated server, .NET 8.
+A classic infection / survival zombie game mode for **Counter-Strike 2** dedicated servers.
+Built on top of [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp), JSON-configured, Linux dedicated server target, .NET 8.
 
-This repository is **two products** under one roof:
+This repository ships **two projects** under one roof:
 
-| Project | Purpose | Path |
+| Project | Description | Path |
 | --- | --- | --- |
-| **ZombieMod plugin** | The CS2 gameplay mod — infection, classes, knockback, props, sounds | `ZombieMod/` + `ZombieMod.Api/` |
-| **WebCon** | A self-hosted web RCON console + multi-server dashboard | `webcon/` |
+| **ZombieMod plugin** | The CS2 gameplay mod — infection, classes, knockback, props, sounds, admin | `ZombieMod/` + `ZombieMod.Api/` |
+| **WebCon** | Self-hosted web RCON dashboard + multi-server control panel | `webcon/` |
 
-The plugin runs inside the CS2 dedicated server container; WebCon is a separate small FastAPI
-container next to it. They are independent — you can use the mod without WebCon and vice versa.
+Both are independent. You can run the plugin without WebCon, and vice versa.
 
 ---
 
-## Quick links
+## Contents
 
-- [What's working today](#whats-working-today)
+- [Features](#features)
 - [Roadmap](#roadmap)
-- [Setup](#setup)
+- [Required mods](#required-mods)
+- [Optional mods](#optional-mods)
+- [Installation](#installation)
 - [Configuration](#configuration)
 - [Commands](#commands)
-- [Workshop addons](#workshop-addons)
+- [Workshop addons in use](#workshop-addons-in-use)
 - [Public plugin API](#public-plugin-api)
-- [Building](#building)
+- [Building from source](#building-from-source)
+- [License](#license)
 
 ---
 
-## What's working today
+## Features
 
-### Gameplay loop
-- Round start → freezetime → mother zombie(s) selected after `FirstInfectionTimer` seconds
-- Mother count = `ceil(alive_players / MotherZombieRatio)`
-- Mother zombie auto-strips weapons (knife only), gets the `motherzombie` class (custom model + buffed health)
-- Humans (CT) vs zombies (T). Knife-infect knocks a human onto the zombie team; their pawn keeps its model swap for the rest of the round
+### Gameplay
+- Round start → freezetime → mother zombie(s) chosen after `FirstInfectionTimer` seconds
+- Mother count scales with player count via `MotherZombieRatio`
+- Mother zombies are stripped to knife-only, get a buffed class (custom model, more HP)
+- Humans (CT) vs zombies (T); knife-infect flips a human's team for the rest of the round
 - Round-end detection: all humans dead → zombies win; all zombies dead → humans win
-- `mp_roundtime` expiry → `TimeoutWinner` policy (0 = zombies, 1 = humans)
-- Per-round cash floor (`StartMoney`) — players below get topped up, players above keep their earnings
-- Cash reward per successful infect (`InfectKillReward`)
-- Map rotation after `MaxRoundsPerMap` — supports vanilla map names and Steam Workshop IDs
+- `mp_roundtime` expiry → `TimeoutWinner` policy (zombies or humans)
+- Per-round cash floor — players below get topped up, players above keep earnings
+- Cash reward per successful knife-infect
+- Map rotation after a configurable round count — supports vanilla map names AND Steam Workshop IDs
 
 ### Classes
-- Three default classes in `classes.json`: `human_default`, `zombie_default`, `motherzombie`
-- Per-class Health, Model, Speed multiplier, RenderR/G/B tint, health regen, knockback resist
-- Custom zombie models loaded via the GFL ZE Content workshop addon (`zombie_basic`, `chris_walker`, `cultist`, `frozen`)
-- Classes apply on infect AND on respawn
+- Per-class Health, Model, Speed, RenderRGB tint, regen, knockback resistance
+- Custom zombie models via mounted Workshop addon (zombie_basic, chris_walker, cultist, frozen)
+- Class applies on infect AND on respawn
 
 ### Knockback
-- Powered by **MovementUnlocker** (Metamod plugin, installed alongside the server)
-- Formula: `direction × dmg × class.Kb × weapon.Kb × hitgroup.Kb`
+- Direction × damage × class.Kb × weapon.Kb × hitgroup.Kb
 - HE-grenade explosion knockback path included
 - Knife knockback ×3, Zeus ×2 by default
 
 ### Weapons
-- 40 weapon entries in `weapons.json`, each with entity name, buy price, purchase command alias, knockback multiplier, restriction toggle, MaxPurchase per life
-- Purchase commands dynamically registered: `!ak`, `!awp`, `!deagle`, `!p90`, …
-- `mp_buy_anywhere 1` enforced + re-applied at +5s / +15s after map start (casual gamemode cfg clobbers it otherwise)
-- `mp_buytime 50` for the first 50 seconds of each round
-- Zombies are stripped to knife-only on infect; if they pick up a dropped weapon it's auto-stripped
-- `sv_infinite_ammo 2` (infinite reserve, normal reload mechanic preserved)
+- 40 weapons in `weapons.json` — entity name, buy price, purchase command alias, knockback multiplier, restriction, MaxPurchase per life
+- Dynamic purchase command registration (`!ak`, `!awp`, `!deagle`, `!p90`, …)
+- `mp_buy_anywhere 1` for the first 50 seconds of each round
+- Zombies are stripped to knife-only on infect; auto-strip on ground pickup
+- Infinite reserve ammo, normal reload mechanic preserved
 
 ### Props (`!prop` menu)
-- WasdMenu-based prop spawner for in-game cash
-- 5 default props from `props.json`: File Cabinet ($400), Wooden Crate S ($400), Fridge ($700), Wooden Crate L ($800), Dumpster ($1500)
-- Props use `COLLISION_GROUP_PROPS` so they actually block players (not pushaway)
-- Physics props with `EnableMotion` + `Wake` so they fall + respond to bullets
-- Per-slot tracking → cleaned up on disconnect / round-end / map change
-
-### Teleport (`!ztele`)
-- Captures each player's spawn origin per-round, teleports them back on command
-- Uses per round + cooldown configurable in `gamesettings.json`
+- WasdMenu prop spawner, costs in-game cash
+- 5 default props (cabinets, crates, fridge, dumpster) using `COLLISION_GROUP_PROPS` so they actually block players
+- VPHYSICS props with `EnableMotion + Wake` — fall correctly, respond to bullets
+- Per-slot tracking, cleaned up on disconnect / round-end / map change
 
 ### Sounds
-- Configurable via `configs/sounds.json` — map event keys to lists of `.vsnd` file paths
-- Current events: `round_ambient` (fires on `OnRoundFreezeEnd`), `mother_zombie` (round-start scream), `zombie_death`, `zombie_idle` (15–25s cadence), `human_death` (zombie kill on human)
-- Custom sound pack via Workshop addon (`3730087911`) for ambient / screams / bite
-- GFL ZE Content (`3160448201`) provides zombie idle voices + death sounds
-- `stopsound` issued on `OnRoundEnd` so background tracks cut cleanly at the round boundary
-- HE-explosion sound on infection removed (visual particle FX still plays) — the in-house scream covers the "you got infected" cue now
-- Round-active gate prevents idle music from firing during freezetime / post-round
+- Configurable via `configs/sounds.json` — map event keys to lists of `.vsnd` paths
+- Events: `round_ambient`, `mother_zombie`, `zombie_death`, `zombie_idle`, `human_death`
+- `stopsound` issued on round end so background tracks cut cleanly
+- Round-active gate prevents idle audio from bleeding into freezetime / post-round
+- Custom sound packs ship via Workshop addons; see [Workshop addons in use](#workshop-addons-in-use)
+
+### Teleport (`!ztele`)
+- Captures spawn origin per-round, teleports back on command
+- Configurable uses per round + cooldown
 
 ### Admin
-- `admins.json` populated; `@css/root` flag on the user's SteamID64
-- `!admin` opens a WasdMenu panel with: Restart Round / End Round Humans Win / End Round Zombies Win / Reload Configs / Skip to Next Map / End Warmup Now
-- `!infect`, `!human`, `!zreload` require `@css/admin`
-- Standard CSSharp target resolution: `@me`, `@all`, `@t`, `@ct`, `#userid`, partial name match
+- `admins.json` populated with the user's SteamID64, `@css/root`
+- `!admin` opens a WasdMenu (restart round, force-end round, skip map, reload configs, end warmup)
+- `!infect`, `!human`, `!zreload` gated on `@css/admin`
+- Standard CSSharp target syntax: `@me`, `@all`, `@t`, `@ct`, `#userid`, partial name
 
-### Reliability / quality-of-life
-- `game_type 0 game_mode 0` pinned + re-applied on every map start (changelevel was occasionally dropping us into Deathmatch)
-- Warmup killer: 5-tick fallback to `mp_restartgame 1` if `mp_warmup_end` doesn't take
-- Workshop addon download via MultiAddonManager (`mm_extra_addons` cvar)
-- Hot-reloadable JSON configs via `!zreload` — no plugin restart needed for config tweaks
-- `\cp -f` discipline in our deploy scripts (the `cp -i` alias on Synology was silently swallowing updates)
+### Reliability
+- `game_type 0 game_mode 0` pinned + re-applied on every map start so changelevel can't drop the server into Deathmatch
+- 5-tick warmup killer with `mp_restartgame 1` fallback if `mp_warmup_end` doesn't take
+- Workshop addon mounting via MultiAddonManager
+- Hot-reloadable JSON configs via `!zreload`
 
 ### WebCon
-- FastAPI + WebSocket app, lives in `webcon/`, runs in its own Docker container
+- FastAPI + WebSocket app in its own Docker container
 - Token-gated dashboard at `http://<host>:8088/`
-- Multi-server: lists every server in `servers.json`, status pill per server, click-through to per-server console
-- **Manual server CRUD from the UI** — add / edit / delete servers without editing JSON files (passwords land in `.env` under per-server keys; `servers.json` written atomically)
-- Per-server console: live `docker logs` tail merged with RCON command/response in one feed, up/down arrow command history, quick-action buttons, workshop map ID input + button, ANSI color codes stripped
-- Broadcast mode: send a single command to every configured server in parallel, each line server-prefixed
-- Cyberpunk-HUD visual theme (black + neon orange + scanline overlay)
-- Tails container logs via mounted Docker socket (read-only)
+- Multi-server: lists every configured server with status pill, click-through to per-server console
+- **Manual server CRUD from the UI** — add/edit/delete servers without editing JSON; passwords write to `.env` atomically
+- Per-server console: live `docker logs` tail merged with RCON command/response in one feed, up/down command history, quick-action buttons, workshop-map ID input, ANSI codes stripped
+- Broadcast mode: fan a command to every server in parallel, responses tagged per server
+- Cyberpunk-HUD theme (black background + neon orange accents)
 
 ---
 
 ## Roadmap
 
-### Working today
-*(see ["What's working today"](#whats-working-today) for the full list)*
+### Shipped
+See [Features](#features).
 
 ### In progress
 | Item | Status |
 | --- | --- |
-| `.vsndevts` soundevents with baked-in per-sound volume | User is authoring the file in their workshop addon; plugin swap from `play <path>` to `EmitSound("ZombieMod.<Event>")` queued |
-| Positional audio for bite + death sounds | Depends on above |
-| WebCon "skill"-driven UI iteration | Cyberpunk-HUD theme just landed — iterating on the look-and-feel |
+| `.vsndevts` soundevents with per-event volume baked in | User-authored .vsndevts in the custom Workshop addon; plugin switch from `play <path>` to `EmitSound("ZombieMod.<Event>")` queued |
+| Positional audio for bite + death | Depends on above |
 
-### Planned / not yet started
+### Planned
 | Item | Notes |
 | --- | --- |
-| `!zclass` picker UI | ChatMenu / WasdMenu listing classes for the calling player; currently a stub message. Class is set by gamesettings only |
+| `!zclass` picker UI | WasdMenu listing available classes for the calling player. Currently a stub |
 | `RandomClassesOnConnect` / `RandomClassesOnSpawn` | Config fields exist; class picker not wired |
-| Napalm fire VFX | Class config tracks state; particle attachment not implemented |
-| Localizer / language file support | All strings currently English-inline |
-| Auto-strip restricted-weapon ground pickups | Currently only strips on purchase + on infect |
-| Live knockback-provider runtime probe | Filesystem heuristic works but doesn't catch loaded-but-disabled providers |
-| Smoke-test suite | Live verification on the dedicated server lives in the user's hands today |
-| `v0.1.0` git tag | Awaits the soundevents migration + smoke test |
-| License decision | Currently TBD — must pick before any public release |
+| Napalm fire VFX | Class config tracks state, particle attachment not implemented |
+| Localizer / language file support | Strings currently English-inline |
+| Live knockback-provider runtime probe | Filesystem heuristic doesn't catch loaded-but-disabled providers |
+| `v0.1.0` git tag | After soundevents migration + smoke test |
+| License | Currently TBD — must pick before any public release |
 
-### Stretch ideas
+### Stretch
 | Item | Notes |
 | --- | --- |
-| Zombie-vision shader / POV effect | Investigated and shelved — Source 2 doesn't expose enough hooks from CSSharp to recolor the player's view; would need a Metamod side plugin |
-| Custom per-class HUD (HP bar, ability cooldown) | Could use CenterHtmlMenu; deferred |
-| ZE-style escape map rotation logic | Map list already supports it; would need win conditions tied to a player reaching an exit zone |
+| Custom per-class HUD (HP bar, ability cooldown) | Possible via CenterHtmlMenu; deferred |
+| ZE-style escape-map win condition | Map rotation already supports it; would need exit-zone trigger entities |
+| Zombie-vision POV shader | Investigated, shelved — Source 2 doesn't expose enough hooks from CSSharp; would require a side Metamod plugin |
 
 ---
 
-## Setup
+## Required mods
 
-### Server-side bind mount layout
+These must be installed for ZombieMod to function:
+
+| Mod | Type | Source | Why |
+| --- | --- | --- | --- |
+| **Metamod:Source** | Engine plugin | https://www.sourcemm.net/ | Loader for everything below |
+| **CounterStrikeSharp** ≥ v1.0.355 | Metamod plugin | https://github.com/roflmuffin/CounterStrikeSharp | Plugin runtime ZombieMod targets |
+| **MovementUnlocker** | Metamod plugin | https://github.com/Source2ZE/MovementUnlocker | Enables velocity writes — needed for knockback to actually push players |
+| **MultiAddonManager** | Metamod plugin | https://github.com/Source2ZE/MultiAddonManager | Mounts Steam Workshop content (models, sounds, maps) at runtime |
+
+CS2 auto-updates occasionally overwrite `gameinfo.gi`, removing the Metamod search-path line. If `meta` becomes an "Unknown command" after a patch, re-inject the line and restart.
+
+## Optional mods
+
+You can layer any of these on top:
+
+| Mod / addon | Purpose |
+| --- | --- |
+| **WebCon** (in this repo) | Browser-based RCON console + multi-server dashboard. See [Installation](#installation) |
+| Custom Workshop sound pack | Drop your own `.vsndevts` + `.vsnd` files into a private Workshop addon, add the ID to `mm_extra_addons`, reference paths/events in `sounds.json` |
+| Custom Workshop maps | Add IDs to `gamesettings.json → MapRotation`; the plugin invokes `host_workshop_map <id>` |
+| Custom player models | Drop model paths into `classes.json → Model` for any class |
+
+---
+
+## Installation
+
+### Repository layout (post-install)
 
 ```
 counterstrike/
-├── ZombieMod/                ← plugin source (this repo)
+├── ZombieMod/                ← plugin source
 ├── ZombieMod.Api/            ← public API source
 ├── configs/                  ← canonical configs (deployed via cp)
 │   ├── classes.json
@@ -159,28 +175,27 @@ counterstrike/
 ├── gameserver/
 │   ├── compose.yaml          ← joedwards32/cs2 image
 │   ├── .env                  ← SRCDS_TOKEN + STEAM_API_KEY (gitignored)
-│   └── data/                 ← CS2 install root (bind-mounted at /home/steam/cs2-dedicated)
-│       └── game/csgo/addons/counterstrikesharp/{plugins,configs}/ZombieMod/
+│   └── data/                 ← CS2 install root (bind-mounted)
 └── webcon/
     ├── compose.yaml
     ├── .env                  ← WEBCON_TOKEN + RCON_PASSWORD (gitignored)
-    └── servers.json          ← runtime-editable from the UI
+    └── servers.json          ← runtime-editable via the UI
 ```
 
-### Install the plugin
+### Plugin deploy
 
-1. Build (see [Building](#building))
-2. Deploy:
+1. Build (see [Building from source](#building-from-source))
+2. Copy artifacts into the CS2 install:
    ```bash
-   \cp -f ZombieMod/bin/Release/net8.0/ZombieMod.dll    gameserver/data/game/csgo/addons/counterstrikesharp/plugins/ZombieMod/
+   \cp -f ZombieMod/bin/Release/net8.0/ZombieMod.dll        gameserver/data/game/csgo/addons/counterstrikesharp/plugins/ZombieMod/
    \cp -f ZombieMod.Api/bin/Release/net8.0/ZombieMod.Api.dll gameserver/data/game/csgo/addons/counterstrikesharp/plugins/ZombieMod/
-   \cp -f configs/*.json gameserver/data/game/csgo/addons/counterstrikesharp/configs/ZombieMod/
+   \cp -f configs/*.json                                     gameserver/data/game/csgo/addons/counterstrikesharp/configs/ZombieMod/
    ```
-3. Restart the server (or `css_plugins reload ZombieMod` if no schema changes)
+3. Restart the server (or `css_plugins reload ZombieMod` for DLL-only changes).
 
-(Use `\cp -f` to bypass the `cp -i` interactive prompt — without the backslash on Synology, copies silently fail to overwrite.)
+The backslash before `cp` bypasses the interactive `cp -i` alias common on Synology DSM — without it, overwrites silently no-op.
 
-### Install WebCon
+### WebCon deploy
 
 ```bash
 cd webcon
@@ -188,15 +203,13 @@ cp .env.example .env       # set WEBCON_TOKEN + RCON_PASSWORD
 docker compose up -d --build
 ```
 
-Open `http://<host>:8088/`, enter the token. Add your servers via the dashboard's **+ Add Server** button.
+Open `http://<host>:8088/`, enter the token. Add your servers via the **+ Add Server** button on the dashboard.
 
 ---
 
 ## Configuration
 
-All five JSON files live in `configs/` and are deployed to the server's
-`addons/counterstrikesharp/configs/ZombieMod/`. All accept comments (`//`) and trailing commas
-(System.Text.Json is configured with `ReadCommentHandling = Skip` and `AllowTrailingCommas = true`).
+All six JSON files live in `configs/` and deploy to `addons/counterstrikesharp/configs/ZombieMod/`. They accept C++-style comments and trailing commas (`System.Text.Json` is configured accordingly).
 
 | File | Purpose |
 | --- | --- |
@@ -204,10 +217,10 @@ All five JSON files live in `configs/` and are deployed to the server's
 | `classes.json` | Per-class Health, Model, Speed, RenderRGB, regen, napalm, knockback resist |
 | `weapons.json` | Per-weapon entity name, buy price, purchase command alias, knockback multiplier, restriction, MaxPurchase |
 | `hitgroups.json` | Per-hitbox knockback multipliers |
-| `props.json` | Spawnable props for `!prop` menu — display name, model path, cost |
-| `sounds.json` | Event → (Volume, Files[]) — paths from MAM-mounted addons |
+| `props.json` | Spawnable props for `!prop` — display name, model path, cost |
+| `sounds.json` | Event → (Volume, Files[]) — paths reference MAM-mounted Workshop content |
 
-`!zreload` hot-reloads all six files. Plugin DLL changes still need `css_plugins reload ZombieMod`.
+`!zreload` hot-reloads all six. Plugin DLL changes still need `css_plugins reload ZombieMod`.
 
 ---
 
@@ -218,9 +231,9 @@ All five JSON files live in `configs/` and are deployed to the server's
 | --- | --- |
 | `!zhelp` | Open the help menu |
 | `!ztele` | Teleport to your round-spawn (limited uses + cooldown) |
-| `!zspawn` | Respawn into the current round (when dead and respawn is enabled) |
-| `!zclass` | Class picker — currently a stub |
-| `!prop` | Open the prop-spawn menu (costs in-game cash) |
+| `!zspawn` | Respawn into the current round (when dead, respawn enabled) |
+| `!zclass` | Class picker (stub — planned) |
+| `!prop` | Open the prop-spawn menu |
 | `!ak`, `!awp`, `!deagle`, `!p90`, … | Per-weapon buy commands |
 
 ### Admin (`@css/admin` or `@css/root`)
@@ -235,18 +248,17 @@ Target syntax: `@me` / `@all` / `@t` / `@ct` / `#userid` / partial name.
 
 ---
 
-## Workshop addons
+## Workshop addons in use
 
-Currently mounted via `mm_extra_addons` (MultiAddonManager):
+Currently mounted via `mm_extra_addons`:
 
 | ID | Name | Purpose |
 | --- | --- | --- |
-| `3160448201` | GFL Zombie Escape Content | Custom zombie models (`zombie_basic`, `chris_walker`, `cultist`, `frozen`) + 26 GFL zombie sounds (idle voices, deaths, pain) + soundevent overrides |
-| `3183164171`, `3215759704` | Player model packs | Additional character models |
+| `3160448201` | GFL Zombie Escape Content | Custom zombie models + 26 zombie sounds (idle voices, deaths, pain) + soundevent overrides |
+| `3183164171`, `3215759704` | Player-model packs | Additional character models |
 | `3730087911` | Zombiemod Sounds (custom) | Custom round-ambient + mother screams + bite effect |
 
-Workshop map rotation is configured in `gamesettings.json → MapRotation` — numeric entries are
-loaded via `host_workshop_map`, anything else via `changelevel`.
+Workshop map rotation is configured via `gamesettings.json → MapRotation` — numeric entries load via `host_workshop_map`, everything else via `changelevel`.
 
 ---
 
@@ -276,9 +288,9 @@ Events:
 
 ---
 
-## Building
+## Building from source
 
-`dotnet` SDK 8.0 required. From the repo root:
+Requirements: `dotnet` SDK 8.0.
 
 ```bash
 cd ZombieMod
@@ -287,7 +299,7 @@ dotnet build -c Release
 
 Output: `ZombieMod/bin/Release/net8.0/ZombieMod.dll`.
 
-If you don't have `dotnet` on the host (e.g. Synology NAS), build through the official image:
+If you don't have `dotnet` on the host (e.g. Synology NAS), build inside the official image:
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" \
@@ -298,19 +310,6 @@ docker run --rm --user "$(id -u):$(id -g)" \
 
 ---
 
-## Compatibility caveats
-
-### Knockback requires MovementUnlocker
-Vanilla CounterStrikeSharp cannot push players around reliably — direct writes to `pawn.AbsVelocity`
-either no-op or get clobbered by the player movement code each tick. ZombieMod relies on the
-**MovementUnlocker** Metamod plugin (https://github.com/Source2ZE/MovementUnlocker) for the
-velocity-write path. Install it alongside Metamod:Source before knockback will work.
-
-### CS2 patch updates can break Metamod
-Steam auto-updates may overwrite `gameinfo.gi`, removing the metamod search-path line. Symptom: `meta` is "Unknown command", `css_plugins list` doesn't work. Fix: re-inject the line.
-
----
-
 ## License
 
-TBD — pick before any public release.
+TBD — to be decided before any public release.
