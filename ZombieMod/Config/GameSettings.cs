@@ -3,16 +3,16 @@ namespace ZombieMod.Config;
 public sealed record GameSettings
 {
     public float FirstInfectionTimer { get; init; } = 15.0f;
-    public float MotherZombieRatio { get; init; } = 7.0f;
-    public bool MotherZombieTeleport { get; init; } = false;
+    public float PatientZeroRatio { get; init; } = 7.0f;
+    public bool PatientZeroTeleport { get; init; } = false;
     public bool CashOnDamage { get; init; } = false;
 
-    /// <summary>0 = zombies win on time, 1 = humans win on time.</summary>
+    /// <summary>0 = infected win on time, 1 = survivors win on time.</summary>
     public int TimeoutWinner { get; init; } = 1;
 
-    public string DefaultHumanBuffer { get; init; } = "human_default";
-    public string DefaultZombieBuffer { get; init; } = "zombie_default";
-    public string MotherZombieBuffer { get; init; } = "motherzombie";
+    public string DefaultSurvivorBuffer { get; init; } = "survivor_default";
+    public string DefaultInfectedBuffer { get; init; } = "infected_default";
+    public string PatientZeroBuffer { get; init; } = "patient_zero";
 
     public bool RandomClassesOnConnect { get; init; } = false;
     public bool RandomClassesOnSpawn { get; init; } = true;
@@ -29,7 +29,7 @@ public sealed record GameSettings
     public float RespawnDelay { get; init; } = 5.0f;
     public bool AllowRespawnJoinLate { get; init; } = false;
 
-    /// <summary>0 = zombie, 1 = human, 2 = pre-death team.</summary>
+    /// <summary>0 = infected, 1 = survivor, 2 = pre-death team.</summary>
     public int RespawnTeam { get; init; } = 0;
 
     /// <summary>Per-class speed override (Speed in classes.json applied as VelocityModifier).</summary>
@@ -39,7 +39,7 @@ public sealed record GameSettings
     /// Players with more keep what they earned.</summary>
     public int StartMoney { get; init; } = 4000;
 
-    /// <summary>Cash awarded to a zombie attacker on a successful knife-infect.</summary>
+    /// <summary>Cash awarded to an infected attacker on a successful knife-transmission.</summary>
     public int InfectKillReward { get; init; } = 500;
 
     /// <summary>Rounds to play on a single map before rotating to the next entry in MapRotation.</summary>

@@ -19,7 +19,7 @@ public sealed class ZombieModPlugin : BasePlugin
     public override string ModuleName => "ZombieMod";
     public override string ModuleVersion => "0.1.0";
     public override string ModuleAuthor => "ZombieMod contributors";
-    public override string ModuleDescription => "Classic infection/survival zombie gameplay for CS2.";
+    public override string ModuleDescription => "Outbreak — classic infection/survival mode for CS2.";
 
     public static readonly PluginCapability<IZombieModAPI> Capability = new("zombiemod:core");
 
@@ -60,17 +60,17 @@ public sealed class ZombieModPlugin : BasePlugin
 
         // Wire service → API event-firing. Internal callers do the firing; external API calls
         // route straight to the service (which fires) so events never raise twice.
-        Infection.FireInfectHook         = (c, a, m, f) =>
+        Infection.FireInfectHook         = (c, a, pz, f) =>
         {
-            Sounds.Broadcast(m ? "mother_zombie" : "infect");
-            return Api.RaiseClientInfect(c, a, m, f);
+            Sounds.Broadcast(pz ? "patient_zero" : "infect");
+            return Api.RaiseClientInfect(c, a, pz, f);
         };
         Infection.FireHumanizeHook       = Api.RaiseClientHumanize;
-        Infection.FireMotherSelectedHook = Api.RaiseMotherZombieSelected;
-        Infection.FireRoundStartHook     = Api.RaiseZombieRoundStart;
+        Infection.FirePatientZeroSelectedHook = Api.RaisePatientZeroSelected;
+        Infection.FireRoundStartHook          = Api.RaiseOutbreakRoundStart;
         Infection.ApplyClassHook         = (c, cls) => Classes.ApplyClass(c, cls);
 
-        ScheduleZombieIdleSounds();
+        ScheduleInfectedIdleSounds();
 
         Capabilities.RegisterPluginCapability(Capability, () => Api);
 
@@ -216,7 +216,7 @@ public sealed class ZombieModPlugin : BasePlugin
         {
             Classes.OnPlayerDeath(victim);
             Respawn.ScheduleRespawn(victim);
-            Sounds.Broadcast(Infection.IsClientInfected(victim) ? "zombie_death" : "human_death");
+            Sounds.Broadcast(Infection.IsClientInfected(victim) ? "infected_death" : "survivor_death");
         }
         return HookResult.Continue;
     }
@@ -231,7 +231,7 @@ public sealed class ZombieModPlugin : BasePlugin
         switch (Respawn.ResolvePostSpawnAction(client))
         {
             case RespawnService.PostSpawnAction.Infect:
-                Infection.InfectClient(client, attacker: null, motherZombie: false, force: true);
+                Infection.InfectClient(client, attacker: null, patientZero: false, force: true);
                 break;
             case RespawnService.PostSpawnAction.Humanize:
                 Infection.HumanizeClient(client, respawn: false);
@@ -250,7 +250,7 @@ public sealed class ZombieModPlugin : BasePlugin
         var client = @event.Userid;
         if (client is null || !client.IsValid) return HookResult.Continue;
 
-        // Zombies: strip non-knife pickups. (Ammo/clip applied via OnEntityCreated above.)
+        // Infected: strip non-knife pickups. (Ammo/clip applied via OnEntityCreated above.)
         if (Infection.IsClientInfected(client)
             && @event.Item is not null
             && !@event.Item.Contains("knife", StringComparison.OrdinalIgnoreCase))
@@ -282,7 +282,7 @@ public sealed class ZombieModPlugin : BasePlugin
     public void Cmd_Infect(CCSPlayerController? caller, CommandInfo info)
         => Commands.HandleInfect(caller, info);
 
-    [ConsoleCommand("css_human", "Force-humanize a player.")]
+    [ConsoleCommand("css_human", "Force-restore a player to survivor.")]
     [CommandHelper(1, "<target>")]
     [RequiresPermissions("@css/admin")]
     public void Cmd_Human(CCSPlayerController? caller, CommandInfo info)
@@ -360,7 +360,7 @@ public sealed class ZombieModPlugin : BasePlugin
         "mp_limitteams 0",
         "mp_autoteambalance 0",
         "mp_disconnect_kills_players 1",
-        // 0 lets the newly-infected player phase through the zombie that knifed them, so they
+        // 0 lets the newly-infected player phase through the infected that knifed them, so they
         // never get stuck inside each other's hitbox at the moment of team-switch.
         "mp_solid_teammates 0",
         "mp_teammates_are_enemies 0",
@@ -368,7 +368,7 @@ public sealed class ZombieModPlugin : BasePlugin
         "mp_give_player_c4 0",
         // We rely on CS2's native round-end detection: when the last alive CT is infected we
         // SwitchTeam them to T, which makes CS2 see 0 CTs alive and end the round naturally.
-        // Setting this to 1 (ZombieSharp's default) breaks that detection.
+        // Setting this to 1 breaks our SwitchTeam-based round-end detection.
         "mp_ignore_round_win_conditions 0",
         // Disable warmup as aggressively as we can — casual mode's gamemode cfg re-enables
         // pausetimer, so we need to clear it explicitly each map start.
@@ -380,11 +380,11 @@ public sealed class ZombieModPlugin : BasePlugin
         // Round time (minutes).
         "mp_roundtime 4",
         // Infinite spare ammo (mode 2). Mag still depletes → reload mechanic preserved, but
-        // the reserve never runs dry. Reload pauses give zombies the tactical opening.
+        // the reserve never runs dry. Reload pauses give infected the tactical opening.
         "sv_infinite_ammo 2",
         // Bots: fill the server so workshop maps populate without players. Override your
         // compose's CS2_BOT_QUOTA=0; the cvar set runs after the image's startup.
-        // Always 2 bots regardless of human count — gives a default testing buddy on solo.
+        // Always 2 bots regardless of player count — gives a default testing buddy on solo.
         "bot_quota_mode normal",
         "bot_quota 2",
         "bot_join_after_player 0",
@@ -415,31 +415,31 @@ public sealed class ZombieModPlugin : BasePlugin
     private readonly Random _idleRng = new();
 
     /// <summary>
-    /// Ambient zombie voice loop. Every 15–25s we broadcast one of the short GFL idle clips
-    /// from sounds.json["zombie_idle"], provided ≥1 alive zombie is on the server and the
+    /// Ambient infected-voice loop. Every 15–25s we broadcast one of the short GFL idle clips
+    /// from sounds.json["infected_idle"], provided ≥1 alive infected is on the server and the
     /// round is active. Cadence assumes 1–2s clips — bump back to 60s+ if we ever wire long
     /// music tracks back in.
     /// </summary>
-    private void ScheduleZombieIdleSounds()
+    private void ScheduleInfectedIdleSounds()
     {
         var delay = 15.0f + (float)(_idleRng.NextDouble() * 10.0);
         AddTimer(delay, () =>
         {
             try
             {
-                // Only broadcast music if a round is actually in progress — otherwise the track
+                // Only broadcast if a round is actually in progress — otherwise the track
                 // bleeds into the post-round / freezetime screens and won't stop.
                 if (Infection.RoundActive)
                 {
-                    var zombies = Utilities.GetPlayers()
+                    var aliveInfected = Utilities.GetPlayers()
                         .Where(p => p is { IsValid: true } && p.PawnIsAlive && Infection.IsClientInfected(p))
                         .ToList();
-                    if (zombies.Count > 0)
-                        Sounds.Broadcast("zombie_idle");
+                    if (aliveInfected.Count > 0)
+                        Sounds.Broadcast("infected_idle");
                 }
             }
             catch { /* don't let one bad tick kill the loop */ }
-            ScheduleZombieIdleSounds();
+            ScheduleInfectedIdleSounds();
         });
     }
 

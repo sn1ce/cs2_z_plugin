@@ -85,7 +85,7 @@ public sealed class ClassService
             Utilities.SetStateChanged(freshPawn, "CBaseEntity", "m_iHealth");
         });
 
-        // Speed: gated — CSSharp limitation per ZombieSharp.
+        // Speed: gated by EnableClassSpeed (toggle-off if you see weapon-attachment glitches).
         if (_config.GameSettings.EnableClassSpeed)
             pawn.VelocityModifier = cls.Speed / 250f;
 

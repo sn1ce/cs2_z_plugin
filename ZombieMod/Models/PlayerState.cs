@@ -13,8 +13,8 @@ public sealed class PlayerState
     public required CCSPlayerController Controller { get; init; }
     public required int Slot { get; init; }
 
-    public bool IsZombie { get; set; }
-    public bool IsMotherZombie { get; set; }
+    public bool IsInfected { get; set; }
+    public bool IsPatientZero { get; set; }
 
     public ClassConfig? ActiveClass { get; set; }
 

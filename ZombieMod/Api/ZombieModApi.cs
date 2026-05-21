@@ -24,22 +24,22 @@ public sealed class ZombieModApi : IZombieModAPI
 
     public event Func<CCSPlayerController, CCSPlayerController?, bool, bool, HookResult?>? OnClientInfect;
     public event Func<CCSPlayerController, bool, HookResult?>? OnClientHumanize;
-    public event Func<IReadOnlyList<CCSPlayerController>, HookResult?>? OnMotherZombieSelected;
-    public event Func<HookResult?>? OnZombieRoundStart;
+    public event Func<IReadOnlyList<CCSPlayerController>, HookResult?>? OnPatientZeroSelected;
+    public event Func<HookResult?>? OnOutbreakRoundStart;
 
     // External callers route through these; internally the services own the event-firing so we
     // never raise twice. Plugin wires service "Fire*Hook" delegates to these Raise* methods.
-    internal HookResult? RaiseClientInfect(CCSPlayerController c, CCSPlayerController? a, bool m, bool f)
-        => OnClientInfect?.Invoke(c, a, m, f);
+    internal HookResult? RaiseClientInfect(CCSPlayerController c, CCSPlayerController? a, bool patientZero, bool f)
+        => OnClientInfect?.Invoke(c, a, patientZero, f);
     internal HookResult? RaiseClientHumanize(CCSPlayerController c, bool r)
         => OnClientHumanize?.Invoke(c, r);
-    internal HookResult? RaiseMotherZombieSelected(IReadOnlyList<CCSPlayerController> chosen)
-        => OnMotherZombieSelected?.Invoke(chosen);
-    internal HookResult? RaiseZombieRoundStart()
-        => OnZombieRoundStart?.Invoke();
+    internal HookResult? RaisePatientZeroSelected(IReadOnlyList<CCSPlayerController> chosen)
+        => OnPatientZeroSelected?.Invoke(chosen);
+    internal HookResult? RaiseOutbreakRoundStart()
+        => OnOutbreakRoundStart?.Invoke();
 
-    public HookResult InfectClient(CCSPlayerController client, CCSPlayerController? attacker, bool motherZombie, bool force)
-        => _infection.InfectClient(client, attacker, motherZombie, force);
+    public HookResult InfectClient(CCSPlayerController client, CCSPlayerController? attacker, bool patientZero, bool force)
+        => _infection.InfectClient(client, attacker, patientZero, force);
 
     public void HumanizeClient(CCSPlayerController client, bool respawn)
         => _infection.HumanizeClient(client, respawn);
@@ -56,7 +56,7 @@ public sealed class ZombieModApi : IZombieModAPI
             Name: cls.Name,
             Team: cls.Team,
             Model: cls.Model,
-            MotherZombie: cls.MotherZombie,
+            PatientZero: cls.PatientZero,
             NapalmTime: cls.NapalmTime,
             Health: cls.Health,
             RegenInterval: cls.Regen_Interval,

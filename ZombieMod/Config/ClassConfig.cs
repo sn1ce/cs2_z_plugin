@@ -5,11 +5,11 @@ public sealed record ClassConfig
     public string Name { get; init; } = "";
     public bool Enable { get; init; } = true;
 
-    /// <summary>0 = zombie (T), 1 = human (CT).</summary>
+    /// <summary>0 = infected (T), 1 = survivor (CT).</summary>
     public int Team { get; init; } = 0;
 
     public string Model { get; init; } = "default";
-    public bool MotherZombie { get; init; } = false;
+    public bool PatientZero { get; init; } = false;
     public float NapalmTime { get; init; } = 0.0f;
     public int Health { get; init; } = 100;
     public int Regen_Interval { get; init; } = 0;

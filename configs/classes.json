@@ -1,10 +1,10 @@
 {
-    "human_default": {
-        "Name": "Default Human",
+    "survivor_default": {
+        "Name": "Default Survivor",
         "Enable": true,
         "Team": 1,
         "Model": "default",
-        "MotherZombie": false,
+        "PatientZero": false,
         "NapalmTime": 0.0,
         "Health": 100,
         "Regen_Interval": 0,
@@ -14,12 +14,12 @@
         "Scale": 1.0,
         "RenderR": 255, "RenderG": 255, "RenderB": 255
     },
-    "zombie_default": {
-        "Name": "Default Zombie",
+    "infected_default": {
+        "Name": "Default Infected",
         "Enable": true,
         "Team": 0,
         "Model": "agents/models/s2ze/zombie_basic/zombie_basic.vmdl",
-        "MotherZombie": false,
+        "PatientZero": false,
         "NapalmTime": 5.0,
         "Health": 8000,
         "Regen_Interval": 10,
@@ -29,12 +29,12 @@
         "Scale": 1.2,
         "RenderR": 220, "RenderG": 40, "RenderB": 40
     },
-    "motherzombie": {
-        "Name": "Mother Zombie",
+    "patient_zero": {
+        "Name": "Patient Zero",
         "Enable": true,
         "Team": 0,
         "Model": "agents/models/s2ze/zombie_chris_walker/zombie_chris_walker.vmdl",
-        "MotherZombie": true,
+        "PatientZero": true,
         "NapalmTime": 5.0,
         "Health": 16000,
         "Regen_Interval": 10,

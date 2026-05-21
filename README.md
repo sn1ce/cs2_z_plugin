@@ -1,6 +1,6 @@
 # ZombieMod for Counter-Strike 2
 
-A classic infection / survival zombie game mode for **Counter-Strike 2** dedicated servers.
+A classic outbreak / infection survival game mode for **Counter-Strike 2** dedicated servers.
 Built on top of [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp), JSON-configured, Linux dedicated server target, .NET 8.
 
 This repository ships **two projects** under one roof:
@@ -33,19 +33,19 @@ Both are independent. You can run the plugin without WebCon, and vice versa.
 ## Features
 
 ### Gameplay
-- Round start → freezetime → mother zombie(s) chosen after `FirstInfectionTimer` seconds
-- Mother count scales with player count via `MotherZombieRatio`
-- Mother zombies are stripped to knife-only, get a buffed class (custom model, more HP)
-- Humans (CT) vs zombies (T); knife-infect flips a human's team for the rest of the round
-- Round-end detection: all humans dead → zombies win; all zombies dead → humans win
-- `mp_roundtime` expiry → `TimeoutWinner` policy (zombies or humans)
+- Round start → freezetime → Patient Zero(s) identified after `FirstInfectionTimer` seconds
+- Patient Zero count scales with player count via `PatientZeroRatio`
+- Patient Zeros are stripped to knife-only and get a buffed class (custom model, more HP)
+- Survivors (CT) vs Infected (T); knife-infect flips a survivor's team for the rest of the round
+- Round-end detection: all survivors dead → outbreak wins; all infected dead → survivors win
+- `mp_roundtime` expiry → `TimeoutWinner` policy (infected or survivors)
 - Per-round cash floor — players below get topped up, players above keep earnings
-- Cash reward per successful knife-infect
+- Cash reward per successful knife-transmission
 - Map rotation after a configurable round count — supports vanilla map names AND Steam Workshop IDs
 
 ### Classes
 - Per-class Health, Model, Speed, RenderRGB tint, regen, knockback resistance
-- Custom zombie models via mounted Workshop addon (zombie_basic, chris_walker, cultist, frozen)
+- Custom infected models via mounted Workshop addon (zombie_basic, chris_walker, cultist, frozen)
 - Class applies on infect AND on respawn
 
 ### Knockback
@@ -57,7 +57,7 @@ Both are independent. You can run the plugin without WebCon, and vice versa.
 - 40 weapons in `weapons.json` — entity name, buy price, purchase command alias, knockback multiplier, restriction, MaxPurchase per life
 - Dynamic purchase command registration (`!ak`, `!awp`, `!deagle`, `!p90`, …)
 - `mp_buy_anywhere 1` for the first 50 seconds of each round
-- Zombies are stripped to knife-only on infect; auto-strip on ground pickup
+- Infected are stripped to knife-only on infect; auto-strip on ground pickup
 - Infinite reserve ammo, normal reload mechanic preserved
 
 ### Props (`!prop` menu)
@@ -68,7 +68,7 @@ Both are independent. You can run the plugin without WebCon, and vice versa.
 
 ### Sounds
 - Configurable via `configs/sounds.json` — map event keys to lists of `.vsnd` paths
-- Events: `round_ambient`, `mother_zombie`, `zombie_death`, `zombie_idle`, `human_death`
+- Events: `round_ambient`, `patient_zero`, `infected_death`, `infected_idle`, `survivor_death`
 - `stopsound` issued on round end so background tracks cut cleanly
 - Round-active gate prevents idle audio from bleeding into freezetime / post-round
 - Custom sound packs ship via Workshop addons; see [Workshop addons in use](#workshop-addons-in-use)
@@ -80,7 +80,7 @@ Both are independent. You can run the plugin without WebCon, and vice versa.
 ### Admin
 - `admins.json` populated with the user's SteamID64, `@css/root`
 - `!admin` opens a WasdMenu (restart round, force-end round, skip map, reload configs, end warmup)
-- `!infect`, `!human`, `!zreload` gated on `@css/admin`
+- `!infect`, `!human` (restores a survivor), `!zreload` gated on `@css/admin`
 - Standard CSSharp target syntax: `@me`, `@all`, `@t`, `@ct`, `#userid`, partial name
 
 ### Reliability
@@ -127,7 +127,7 @@ See [Features](#features).
 | --- | --- |
 | Custom per-class HUD (HP bar, ability cooldown) | Possible via CenterHtmlMenu; deferred |
 | ZE-style escape-map win condition | Map rotation already supports it; would need exit-zone trigger entities |
-| Zombie-vision POV shader | Investigated, shelved — Source 2 doesn't expose enough hooks from CSSharp; would require a side Metamod plugin |
+| Infected-vision POV shader | Investigated, shelved — Source 2 doesn't expose enough hooks from CSSharp; would require a side Metamod plugin |
 
 ---
 
@@ -213,7 +213,7 @@ All six JSON files live in `configs/` and deploy to `addons/counterstrikesharp/c
 
 | File | Purpose |
 | --- | --- |
-| `gamesettings.json` | Round timings, mother-zombie ratio, respawn policy, start money, kill rewards, map rotation, master toggles |
+| `gamesettings.json` | Round timings, Patient Zero ratio, respawn policy, start money, kill rewards, map rotation, master toggles |
 | `classes.json` | Per-class Health, Model, Speed, RenderRGB, regen, napalm, knockback resist |
 | `weapons.json` | Per-weapon entity name, buy price, purchase command alias, knockback multiplier, restriction, MaxPurchase |
 | `hitgroups.json` | Per-hitbox knockback multipliers |
@@ -241,7 +241,7 @@ All six JSON files live in `configs/` and deploy to `addons/counterstrikesharp/c
 | --- | --- |
 | `!admin` | Open the admin WasdMenu (restart round, force win, skip map, reload configs, end warmup) |
 | `!infect <target>` | Force-infect a target |
-| `!human <target>` | Force-humanize a target |
+| `!human <target>` | Restore a target to survivor |
 | `!zreload` | Reload all configs |
 
 Target syntax: `@me` / `@all` / `@t` / `@ct` / `#userid` / partial name.
@@ -254,7 +254,7 @@ Currently mounted via `mm_extra_addons`:
 
 | ID | Name | Purpose |
 | --- | --- | --- |
-| `3160448201` | GFL Zombie Escape Content | Custom zombie models + 26 zombie sounds (idle voices, deaths, pain) + soundevent overrides |
+| `3160448201` | GFL Zombie Escape Content | Custom infected models + 26 infected sounds (idle voices, deaths, pain) + soundevent overrides |
 | `3183164171`, `3215759704` | Player-model packs | Additional character models |
 | `3730087911` | Zombiemod Sounds (custom) | Custom round-ambient + mother screams + bite effect |
 
@@ -270,21 +270,21 @@ Downstream plugins consume `IZombieModAPI` via CSSharp's `PluginCapability`:
 var caps = new PluginCapability<IZombieModAPI>("zombiemod:core");
 var api = caps.Get();
 
-api.OnClientInfect += (client, attacker, mother, force) =>
+api.OnClientInfect += (client, attacker, patientZero, force) =>
 {
     return HookResult.Continue; // or HookResult.Stop to cancel
 };
 
-api.InfectClient(controller, attacker: null, motherZombie: true, force: true);
+api.InfectClient(controller, attacker: null, patientZero: true, force: true);
 ```
 
 Reference `ZombieMod.Api.dll` from your plugin — **never** reference `ZombieMod.dll` directly.
 
 Events:
-- `OnClientInfect(client, attacker, motherZombie, force) → HookResult`
+- `OnClientInfect(client, attacker, patientZero, force) → HookResult`
 - `OnClientHumanize(client, respawn) → HookResult`
-- `OnMotherZombieSelected(motherList)`
-- `OnZombieRoundStart()`
+- `OnPatientZeroSelected(patientZeroList)`
+- `OnOutbreakRoundStart()`
 
 ---
 

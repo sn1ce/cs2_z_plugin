@@ -170,22 +170,22 @@ public sealed class ConfigService
             _logger.LogError("[Config] hitgroups.json contains zero entries");
             ok = false;
         }
-        if (!Classes.ContainsKey(GameSettings.DefaultHumanBuffer))
+        if (!Classes.ContainsKey(GameSettings.DefaultSurvivorBuffer))
         {
-            _logger.LogError("[Config] gamesettings.DefaultHumanBuffer '{Id}' not in classes.json",
-                GameSettings.DefaultHumanBuffer);
+            _logger.LogError("[Config] gamesettings.DefaultSurvivorBuffer '{Id}' not in classes.json",
+                GameSettings.DefaultSurvivorBuffer);
             ok = false;
         }
-        if (!Classes.ContainsKey(GameSettings.DefaultZombieBuffer))
+        if (!Classes.ContainsKey(GameSettings.DefaultInfectedBuffer))
         {
-            _logger.LogError("[Config] gamesettings.DefaultZombieBuffer '{Id}' not in classes.json",
-                GameSettings.DefaultZombieBuffer);
+            _logger.LogError("[Config] gamesettings.DefaultInfectedBuffer '{Id}' not in classes.json",
+                GameSettings.DefaultInfectedBuffer);
             ok = false;
         }
-        if (!Classes.ContainsKey(GameSettings.MotherZombieBuffer))
+        if (!Classes.ContainsKey(GameSettings.PatientZeroBuffer))
         {
-            _logger.LogError("[Config] gamesettings.MotherZombieBuffer '{Id}' not in classes.json",
-                GameSettings.MotherZombieBuffer);
+            _logger.LogError("[Config] gamesettings.PatientZeroBuffer '{Id}' not in classes.json",
+                GameSettings.PatientZeroBuffer);
             ok = false;
         }
 
@@ -203,10 +203,10 @@ public sealed class ConfigService
                 _logger.LogWarning("[Config] weapons.{Key} has no WeaponEntity", key);
         }
 
-        if (GameSettings.MotherZombieRatio <= 0)
+        if (GameSettings.PatientZeroRatio <= 0)
         {
-            _logger.LogError("[Config] gamesettings.MotherZombieRatio must be > 0 (got {V})",
-                GameSettings.MotherZombieRatio);
+            _logger.LogError("[Config] gamesettings.PatientZeroRatio must be > 0 (got {V})",
+                GameSettings.PatientZeroRatio);
             ok = false;
         }
         if (GameSettings.TimeoutWinner is not (0 or 1))

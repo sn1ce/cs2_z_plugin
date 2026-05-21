@@ -9,7 +9,7 @@ public sealed record ZombieClass(
     string Name,
     int Team,
     string Model,
-    bool MotherZombie,
+    bool PatientZero,
     float NapalmTime,
     int Health,
     int RegenInterval,

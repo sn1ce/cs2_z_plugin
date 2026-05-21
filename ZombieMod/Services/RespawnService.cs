@@ -81,7 +81,7 @@ public sealed class RespawnService
         {
             0 => PostSpawnAction.Infect,
             1 => PostSpawnAction.Humanize,
-            2 => (pre is { IsZombie: true }) ? PostSpawnAction.Infect : PostSpawnAction.Humanize,
+            2 => (pre is { IsInfected: true }) ? PostSpawnAction.Infect : PostSpawnAction.Humanize,
             _ => PostSpawnAction.Infect,
         };
     }

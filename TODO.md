@@ -4,7 +4,7 @@ Tracker. One line per task. Tick as you go.
 
 ## Phase 0 — Scaffold
 - [x] Confirm latest CSSharp release (v1.0.368, 2026-05-17)
-- [x] Mine ZombieSharp config schemas from archived repo
+- [x] Lock initial JSON config schema (classes, weapons, gamesettings, hitgroups)
 - [x] Solution + two csprojs (ZombieMod, ZombieMod.Api)
 - [x] Service stubs + record-based config types
 - [x] Initial configs (gamesettings, weapons, classes, hitgroups)
@@ -14,18 +14,18 @@ Tracker. One line per task. Tick as you go.
 ## Phase 1 — Config
 - [x] `ConfigService` load all four JSON files at startup
 - [x] `JsonSerializerOptions`: comments skip, trailing commas, case-insensitive
-- [x] Schema validation: file+key error logs, cross-references (DefaultHumanBuffer etc.)
+- [x] Schema validation: file+key error logs, cross-references (DefaultSurvivorBuffer etc.)
 - [x] WeaponsByEntity + HitgroupsByIndex auxiliary lookups
 - [x] `!zreload` admin command for hot-reload
 
 ## Phase 2 — Infection
 - [x] `EventRoundStart` → reset state, shuffle all to CT
 - [x] `EventRoundFreezeEnd` → schedule first infection (`AddTimer FirstInfectionTimer`)
-- [x] Mother zombie selection: `ceil(playerCount / MotherZombieRatio)`, random
-- [x] `InfectClient(controller, attacker, motherZombie, force)`: team swap + class + event
-- [x] `HumanizeClient(controller, respawn)`: reverse infect
+- [x] Patient Zero selection: `ceil(playerCount / PatientZeroRatio)`, random
+- [x] `InfectClient(controller, attacker, patientZero, force)`: team swap + class + event
+- [x] `HumanizeClient(controller, respawn)`: reverse infect (restore survivor)
 - [x] Knife-only infection in `OnPlayerHurt`
-- [x] Round-end check: all-humans-dead → zombies win; all-zombies-dead → humans win
+- [x] Round-end check: all survivors dead → outbreak wins; all infected dead → survivors win
 - [ ] Round-timer expires (`TimeoutWinner`) — deferred; needs `mp_roundtime` timer hook
 
 ## Phase 3 — Respawn
@@ -39,17 +39,17 @@ Tracker. One line per task. Tick as you go.
 - [x] Apply Health on infect/spawn (deferred via 0.3s timer so spawn doesn't clobber)
 - [x] Apply Model — defaults to phoenix/sas if `default`
 - [x] Health regen: per-player `AddTimer(Regen_Interval, REPEAT)`
-- [x] ArmorValue = 0, helmet = false for zombies
-- [x] Speed: gated behind `EnableClassSpeed` (default false — CSSharp limitation)
+- [x] ArmorValue = 0, helmet = false for infected
+- [x] Speed: gated behind `EnableClassSpeed` (toggle-off if you see weapon-attachment glitches)
 - [x] Re-apply velocity modifier on hurt to counter freezetime resets
 - [ ] Napalm visual (fire particles) — state tracked but no VFX yet
 - [ ] `!zclass` picker UI (ChatMenu) — deferred; Phase 1 sets via config only
 - [ ] `RandomClassesOnConnect` / `RandomClassesOnSpawn` — config exists, picker not wired
 
 ## Phase 5 — Knockback
-- [x] `KnockbackProviderDetector` filesystem heuristic (CSSharpFixes / MovementUnlocker / CS2-SigPatcher)
-- [x] Logs Warning and disables knockback if none found
-- [x] `EventPlayerHurt` → zombie-victim + human-attacker filter
+- [x] `KnockbackProviderDetector` filesystem heuristic (MovementUnlocker)
+- [x] Logs Warning and disables knockback if provider missing
+- [x] `EventPlayerHurt` → infected-victim + survivor-attacker filter
 - [x] direction × dmgHealth × class.Kb × weapon.Kb × hitgroup.Kb formula
 - [x] HE grenade explosion knockback path
 - [x] One `Vector` allocation per hurt event (not per tick)

@@ -40,8 +40,8 @@ public sealed class KnockbackService
         if (!victim.IsValid || !attacker.IsValid) return;
         if (attacker.DesignerName != "cs_player_controller") return;
 
-        // Only push zombies pushed by humans.
-        if (!_infection.IsClientHuman(attacker) || !_infection.IsClientInfected(victim)) return;
+        // Only push infected being attacked by survivors.
+        if (!_infection.IsClientSurvivor(attacker) || !_infection.IsClientInfected(victim)) return;
 
         var victimPawn = victim.PlayerPawn.Value;
         var attackerPawn = attacker.PlayerPawn.Value;

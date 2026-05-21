@@ -86,13 +86,13 @@ public sealed class CommandService
             return;
         }
 
-        var mother = !_infection.InfectionStarted;
+        var patientZero = !_infection.InfectionStarted;
         var count = 0;
         foreach (var player in targets)
         {
             if (player is null || !player.IsValid || !player.PawnIsAlive) continue;
             if (_infection.IsClientInfected(player)) continue;
-            _infection.InfectClient(player, attacker: null, motherZombie: mother, force: true);
+            _infection.InfectClient(player, attacker: null, patientZero: patientZero, force: true);
             count++;
         }
         info.ReplyToCommand($" [ZombieMod] Infected {count} target(s).");
@@ -111,7 +111,7 @@ public sealed class CommandService
         foreach (var player in targets)
         {
             if (player is null || !player.IsValid) continue;
-            if (_infection.IsClientHuman(player) && player.PawnIsAlive) continue;
+            if (_infection.IsClientSurvivor(player) && player.PawnIsAlive) continue;
             _infection.HumanizeClient(player, respawn: !player.PawnIsAlive);
             count++;
         }
@@ -172,15 +172,15 @@ public sealed class CommandService
             Server.ExecuteCommand("mp_restartgame 1");
             client.PrintToChat(" \x04[ZombieMod]\x01 Round restarting…");
         });
-        menu.AddItem("End Round — Humans Win", (client, _) =>
+        menu.AddItem("End Round — Survivors Win", (client, _) =>
         {
             _infection.ForceEndRound(CsTeam.CounterTerrorist);
-            client.PrintToChat(" \x04[ZombieMod]\x01 Forced humans win.");
+            client.PrintToChat(" \x04[ZombieMod]\x01 Forced survivors win.");
         });
-        menu.AddItem("End Round — Zombies Win", (client, _) =>
+        menu.AddItem("End Round — Outbreak Wins", (client, _) =>
         {
             _infection.ForceEndRound(CsTeam.Terrorist);
-            client.PrintToChat(" \x04[ZombieMod]\x01 Forced zombies win.");
+            client.PrintToChat(" \x04[ZombieMod]\x01 Forced outbreak wins.");
         });
         menu.AddItem("Reload Configs", (client, _) =>
         {

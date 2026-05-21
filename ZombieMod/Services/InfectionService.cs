@@ -26,10 +26,10 @@ public sealed class InfectionService
     // Reference back to plugin for timer creation. Set by plugin after construction.
     internal BasePlugin? Host { get; set; }
 
-    // Hook for the public API to fire OnClientInfect / OnClientHumanize / OnMotherZombieSelected.
+    // Hook for the public API to fire OnClientInfect / OnClientHumanize / OnPatientZeroSelected.
     internal Func<CCSPlayerController, CCSPlayerController?, bool, bool, HookResult?>? FireInfectHook;
     internal Func<CCSPlayerController, bool, HookResult?>? FireHumanizeHook;
-    internal Func<IReadOnlyList<CCSPlayerController>, HookResult?>? FireMotherSelectedHook;
+    internal Func<IReadOnlyList<CCSPlayerController>, HookResult?>? FirePatientZeroSelectedHook;
     internal Func<HookResult?>? FireRoundStartHook;
 
     // Hook to apply class attributes when a player is infected/humanized; implemented in Phase 4.
@@ -82,8 +82,8 @@ public sealed class InfectionService
 
         foreach (var p in _players.Values)
         {
-            p.IsZombie = false;
-            p.IsMotherZombie = false;
+            p.IsInfected = false;
+            p.IsPatientZero = false;
             p.ActiveClass = null;
             p.ResetForRound();
         }
@@ -128,7 +128,7 @@ public sealed class InfectionService
     {
         if (Host is null)
         {
-            _logger.LogError("[Infection] Host plugin not set; cannot schedule mother zombie timer.");
+            _logger.LogError("[Infection] Host plugin not set; cannot schedule Patient Zero timer.");
             return;
         }
 
@@ -145,12 +145,12 @@ public sealed class InfectionService
         var delay = MathF.Max(1.0f, _config.GameSettings.FirstInfectionTimer);
         _firstInfectionTimer = Host.AddTimer(
             delay,
-            InfectMotherZombies,
+            InfectPatientZeros,
             TimerFlags.STOP_ON_MAPCHANGE);
 
         // Welcome banner + countdown to first infection.
-        Server.PrintToChatAll(" \x04[ZombieMod]\x01 this is zombiemod made by snice");
-        Server.PrintToChatAll($" \x04[ZombieMod]\x01 First infection in \x07{(int)delay}\x01 seconds…");
+        Server.PrintToChatAll(" \x04[ZombieMod]\x01 Outbreak — a CS2 mod by snice");
+        Server.PrintToChatAll($" \x04[ZombieMod]\x01 Outbreak in \x07{(int)delay}\x01 seconds…");
 
         // Decrement BEFORE printing so the displayed value reflects actual seconds remaining:
         //   t=1s → "14s"  (14 seconds until infection)
@@ -171,12 +171,12 @@ public sealed class InfectionService
             {
                 if (p is null || !p.IsValid) continue;
                 if (p.Team is CsTeam.Spectator or CsTeam.None) continue;
-                p.PrintToCenter($"First infection in {_countdownRemaining}s");
+                p.PrintToCenter($"Outbreak in {_countdownRemaining}s");
             }
         }, TimerFlags.REPEAT | TimerFlags.STOP_ON_MAPCHANGE);
 
         // Round-timeout timer — if mp_roundtime expires without elimination, end the round in
-        // favour of the team configured by GameSettings.TimeoutWinner (0=zombies, 1=humans).
+        // favour of the team configured by GameSettings.TimeoutWinner (0=infected, 1=survivors).
         var mpRoundtime = ConVar.Find("mp_roundtime");
         var roundtimeMinutes = mpRoundtime?.GetPrimitiveValue<float>() ?? 3.0f;
         var roundtimeSec = MathF.Max(5f, roundtimeMinutes * 60f);
@@ -192,8 +192,8 @@ public sealed class InfectionService
         if (!_infectionStarted) return; // pre-infection: nothing to time out
         var winner = _config.GameSettings.TimeoutWinner switch
         {
-            0 => CsTeam.Terrorist,           // zombies win
-            1 => CsTeam.CounterTerrorist,    // humans win
+            0 => CsTeam.Terrorist,           // infected win
+            1 => CsTeam.CounterTerrorist,    // survivors win
             _ => CsTeam.None,
         };
         _logger.LogInformation("[Infection] Round time expired — TimeoutWinner={W}", winner);
@@ -254,7 +254,7 @@ public sealed class InfectionService
         _countdownTimer = null;
     }
 
-    public void InfectMotherZombies()
+    public void InfectPatientZeros()
     {
         if (_infectionStarted) return;
 
@@ -265,36 +265,36 @@ public sealed class InfectionService
 
         if (alive.Count == 0)
         {
-            _logger.LogWarning("[Infection] InfectMotherZombies fired with zero alive players.");
+            _logger.LogWarning("[Infection] InfectPatientZeros fired with zero alive players.");
             return;
         }
 
-        var ratio = _config.GameSettings.MotherZombieRatio;
+        var ratio = _config.GameSettings.PatientZeroRatio;
         var needed = Math.Max(1, (int)Math.Ceiling(alive.Count / ratio));
 
         var rng = new Random();
-        // Prefer real players over bots — fall back to bots only if not enough humans alive.
-        var humans = alive.Where(p => !p.IsBot).OrderBy(_ => rng.Next()).ToList();
-        var bots   = alive.Where(p =>  p.IsBot).OrderBy(_ => rng.Next()).ToList();
-        var chosen = humans.Take(needed).ToList();
+        // Prefer real players over bots — fall back to bots only if not enough live players alive.
+        var realPlayers = alive.Where(p => !p.IsBot).OrderBy(_ => rng.Next()).ToList();
+        var bots        = alive.Where(p =>  p.IsBot).OrderBy(_ => rng.Next()).ToList();
+        var chosen = realPlayers.Take(needed).ToList();
         if (chosen.Count < needed)
             chosen.AddRange(bots.Take(needed - chosen.Count));
 
-        var vetoResult = FireMotherSelectedHook?.Invoke(chosen);
+        var vetoResult = FirePatientZeroSelectedHook?.Invoke(chosen);
         if (vetoResult is HookResult.Stop)
         {
-            _logger.LogInformation("[Infection] Mother zombie selection cancelled by API consumer.");
+            _logger.LogInformation("[Infection] Patient Zero selection cancelled by API consumer.");
             return;
         }
 
         _infectionStarted = true;
         foreach (var player in chosen)
         {
-            InfectClient(player, attacker: null, motherZombie: true, force: true);
+            InfectClient(player, attacker: null, patientZero: true, force: true);
         }
 
         _logger.LogInformation(
-            "[Infection] Started: {N} mother zombies of {Total} alive.",
+            "[Infection] Outbreak started: {N} Patient Zero(s) of {Total} alive.",
             chosen.Count, alive.Count);
     }
 
@@ -303,7 +303,7 @@ public sealed class InfectionService
     public HookResult InfectClient(
         CCSPlayerController client,
         CCSPlayerController? attacker,
-        bool motherZombie,
+        bool patientZero,
         bool force)
     {
         if (!client.IsValid)
@@ -312,7 +312,7 @@ public sealed class InfectionService
             return HookResult.Stop;
         }
 
-        var hook = FireInfectHook?.Invoke(client, attacker, motherZombie, force);
+        var hook = FireInfectHook?.Invoke(client, attacker, patientZero, force);
         if (hook is HookResult.Stop or HookResult.Handled)
         {
             _logger.LogInformation("[Infection] {Name} infect cancelled by API.", client.PlayerName);
@@ -320,18 +320,18 @@ public sealed class InfectionService
         }
 
         var state = GetOrCreateState(client);
-        state.IsZombie = true;
-        state.IsMotherZombie = motherZombie;
+        state.IsInfected = true;
+        state.IsPatientZero = patientZero;
 
         if (client.Team != CsTeam.Terrorist)
             client.SwitchTeam(CsTeam.Terrorist);
 
-        // Zombies are melee-only — strip all weapons except the knife.
+        // Infected are melee-only — strip all weapons except the knife.
         StripWeapons(client, keepKnife: true);
 
-        var classId = motherZombie
-            ? _config.GameSettings.MotherZombieBuffer
-            : _config.GameSettings.DefaultZombieBuffer;
+        var classId = patientZero
+            ? _config.GameSettings.PatientZeroBuffer
+            : _config.GameSettings.DefaultInfectedBuffer;
 
         if (_config.Classes.TryGetValue(classId, out var cls))
         {
@@ -343,19 +343,19 @@ public sealed class InfectionService
             _logger.LogError("[Infection] Class '{Id}' missing from classes.json; cannot apply.", classId);
         }
 
-        // Zombie vision: clear the red human glow, then paint a dark-green zombie glow so
-        // zombies are visibly team-coded in spectate / kill-cam / through walls.
-        ApplyTeamGlow(client, ZombieMod.Models.TeamGlow.Zombie);
+        // Infected vision: clear the red survivor glow, then paint a dark-green infected glow so
+        // they're visibly team-coded in spectate / kill-cam / through walls.
+        ApplyTeamGlow(client, ZombieMod.Models.TeamGlow.Infected);
 
-        // Transition VFX/shake — fires for every infection (knife + mother + admin) so the
-        // newly-turned zombie always gets a clear "you changed" visual + camera kick.
+        // Transition VFX/shake — fires for every infection (knife + Patient Zero + admin) so
+        // the newly-turned player always gets a clear "you changed" visual + camera kick.
         FireInfectionEffect(client);
         FireScreenShake(client);
 
         if (attacker is not null && attacker.IsValid)
         {
             FakeInfectKillfeed(client, attacker);
-            // Award the zombie cash for a successful infect — CS2's native kill bonus never
+            // Award the infected cash for a successful infect — CS2's native kill bonus never
             // fires for us since the victim doesn't actually die (we just team-switch them).
             var reward = _config.GameSettings.InfectKillReward;
             if (reward > 0 && attacker.InGameMoneyServices is not null)
@@ -373,7 +373,7 @@ public sealed class InfectionService
     }
 
     /// <summary>
-    /// Apply a wall-piercing glow keyed off team — red for humans, dark green for zombies,
+    /// Apply a wall-piercing glow keyed off team — red for survivors, dark green for infected,
     /// clear for neither. CS2's glow is broadcast to all clients so this is a team-coding
     /// hint visible everywhere (kill-cam, spectate, through walls), not a per-viewer mask.
     /// </summary>
@@ -390,14 +390,14 @@ public sealed class InfectionService
             {
                 switch (tint)
                 {
-                    case ZombieMod.Models.TeamGlow.Human:
+                    case ZombieMod.Models.TeamGlow.Survivor:
                         pawn.Glow.GlowColorOverride = Color.FromArgb(255, 255, 50, 50);
                         pawn.Glow.GlowType = 3;
                         pawn.Glow.GlowRange = 0;
                         pawn.Glow.GlowRangeMin = 0;
                         pawn.Glow.GlowTime = 0;
                         break;
-                    case ZombieMod.Models.TeamGlow.Zombie:
+                    case ZombieMod.Models.TeamGlow.Infected:
                         pawn.Glow.GlowColorOverride = Color.FromArgb(255, 30, 200, 30);
                         pawn.Glow.GlowType = 3;
                         pawn.Glow.GlowRange = 0;
@@ -422,7 +422,7 @@ public sealed class InfectionService
 
     /// <summary>
     /// Spawn a vanilla HE-grenade explosion particle at the victim's feet. Visual only — no
-    /// damage, no knockback. Fires for every infection (knife / mother / admin) so the player
+    /// damage, no knockback. Fires for every infection (knife / Patient Zero / admin) so the player
     /// always gets a clear "you turned" signal.
     /// </summary>
     private void FireInfectionEffect(CCSPlayerController victim)
@@ -499,13 +499,13 @@ public sealed class InfectionService
         }
 
         var state = GetOrCreateState(client);
-        state.IsZombie = false;
-        state.IsMotherZombie = false;
+        state.IsInfected = false;
+        state.IsPatientZero = false;
 
         if (client.Team != CsTeam.CounterTerrorist)
             client.SwitchTeam(CsTeam.CounterTerrorist);
 
-        if (_config.Classes.TryGetValue(_config.GameSettings.DefaultHumanBuffer, out var cls))
+        if (_config.Classes.TryGetValue(_config.GameSettings.DefaultSurvivorBuffer, out var cls))
         {
             state.ActiveClass = cls;
             ApplyClassHook?.Invoke(client, cls);
@@ -514,17 +514,17 @@ public sealed class InfectionService
         if (respawn && !client.PawnIsAlive)
             client.Respawn();
 
-        // Zombie vision: light humans up so zombies (and themselves) see them through walls.
-        ApplyTeamGlow(client, ZombieMod.Models.TeamGlow.Human);
+        // Survivor glow: tag them so infected (and themselves) see them through walls.
+        ApplyTeamGlow(client, ZombieMod.Models.TeamGlow.Survivor);
     }
 
     // ─── queries ──────────────────────────────────────────────────────────────
 
     public bool IsClientInfected(CCSPlayerController client)
-        => GetState(client)?.IsZombie ?? false;
+        => GetState(client)?.IsInfected ?? false;
 
-    public bool IsClientHuman(CCSPlayerController client)
-        => GetState(client) is { IsZombie: false };
+    public bool IsClientSurvivor(CCSPlayerController client)
+        => GetState(client) is { IsInfected: false };
 
     // ─── hurt + death plumbing ────────────────────────────────────────────────
 
@@ -534,9 +534,9 @@ public sealed class InfectionService
         if (!victim.IsValid || !attacker.IsValid) return;
         if (victim.Slot == attacker.Slot) return;
 
-        if (IsClientHuman(victim) && IsClientInfected(attacker) && IsKnifeWeapon(weapon))
+        if (IsClientSurvivor(victim) && IsClientInfected(attacker) && IsKnifeWeapon(weapon))
         {
-            InfectClient(victim, attacker, motherZombie: false, force: false);
+            InfectClient(victim, attacker, patientZero: false, force: false);
         }
     }
 
@@ -556,32 +556,32 @@ public sealed class InfectionService
     {
         if (!_infectionStarted) return;
 
-        var aliveZombies = 0;
-        var aliveHumans  = 0;
+        var aliveInfected  = 0;
+        var aliveSurvivors = 0;
 
         foreach (var p in Utilities.GetPlayers())
         {
             if (p is null || !p.IsValid || !p.PawnIsAlive) continue;
             if (p.Team is CsTeam.Spectator or CsTeam.None) continue;
 
-            if (IsClientInfected(p)) aliveZombies++;
-            else aliveHumans++;
+            if (IsClientInfected(p)) aliveInfected++;
+            else aliveSurvivors++;
         }
 
         // Solo-session escape hatch: with only one player there's no meaningful "win"
         // condition to fire. Skip the auto-terminate so the player can roam — the
         // round-timeout timer (mp_roundtime * 60s) will reset naturally.
-        if (aliveZombies + aliveHumans <= 1)
+        if (aliveInfected + aliveSurvivors <= 1)
             return;
 
-        if (aliveZombies == 0 && aliveHumans > 0)
+        if (aliveInfected == 0 && aliveSurvivors > 0)
         {
-            _logger.LogInformation("[Infection] Humans win — no zombies remain.");
+            _logger.LogInformation("[Infection] Survivors win — no infected remain.");
             TerminateRound(CsTeam.CounterTerrorist);
         }
-        else if (aliveHumans == 0 && aliveZombies > 0)
+        else if (aliveSurvivors == 0 && aliveInfected > 0)
         {
-            _logger.LogInformation("[Infection] Zombies win — no humans remain.");
+            _logger.LogInformation("[Infection] Outbreak claims survivors — no survivors remain.");
             TerminateRound(CsTeam.Terrorist);
         }
     }
@@ -656,9 +656,9 @@ public sealed class InfectionService
     {
         // Direct w.Remove() crashes CS2 with "WriteEnterPVS: GetEntServerClass failed" on the
         // next net tick — the entity is freed but the player's inventory handle still references
-        // it. ZombieSharp's working pattern: set as active, DropActiveWeapon (removes from
-        // inventory cleanly), then schedule a deferred "Kill" entity-IO event for safe
-        // destruction through the engine's normal teardown path.
+        // it. Working pattern: set as active, DropActiveWeapon (removes from inventory
+        // cleanly), then schedule a deferred "Kill" entity-IO event for safe destruction
+        // through the engine's normal teardown path.
         var slot = client.Slot;
         Server.NextFrame(() =>
         {
