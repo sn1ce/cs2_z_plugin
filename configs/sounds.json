@@ -9,11 +9,15 @@
     //   - 3730087911 = Zombiemod Sounds (custom .vsndevts with ZombieMod.* events)
     // Live-reload via "css_zreload".
 
-    // Ambient track — restarts on every OnRoundFreezeEnd. The .vsndevts entry sets volume.
-    // OnRoundEnd issues "stopsound" so it cuts cleanly at the round boundary.
+    // Ambient track — restarts on every OnRoundFreezeEnd. OnRoundEnd issues "stopsound"
+    // so it cuts cleanly at the round boundary.
+    // SoundEvent fallback: the "ZombieMod.Ambient" entry didn't compile into the workshop
+    // addon's .vsndevts_c (Mother + Bite events made it, Ambient didn't — likely a stale
+    // compile cache). Falls back to "play <path>" at full volume until the .vsndevts is
+    // fixed and the addon is re-published.
     "round_ambient": {
-        "SoundEvent": "ZombieMod.Ambient",
-        "Volume": 0.5,
+        "SoundEvent": "",
+        "Volume": 1.0,
         "Files": [
             "sounds/zombie_event_ambient_sound.vsnd"
         ]
