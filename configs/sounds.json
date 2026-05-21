@@ -1,22 +1,28 @@
 {
-    // Each event has "Volume" (advisory — playvol is a no-op stub in CS2) and "Files".
-    // Paths relative to csgo/, no leading slash, .vsnd extension (no _c).
+    // Each event has either:
+    //   - "SoundEvent": "<name>"   → engine EmitSound (volume baked into the addon's .vsndevts)
+    //   - "Files": ["sounds/...vsnd", ...] → client "play <path>" fallback (full volume, 2D)
+    // "Volume" is advisory only for the "Files" path.
+    //
     // Sources mounted via MAM:
-    //   - 3160448201 = GFL ZE Content (infected idle voices fallback)
-    //   - 3730087911 = Zombiemod Sounds (custom pack: ambient + screams + bite)
+    //   - 3160448201 = GFL ZE Content (raw vsnd paths under sounds/zr/...)
+    //   - 3730087911 = Zombiemod Sounds (custom .vsndevts with ZombieMod.* events)
     // Live-reload via "css_zreload".
 
-    // Ambient track — restarts on every OnRoundFreezeEnd. Loops on the client until
-    // OnRoundEnd issues "stopsound" so it never bleeds into post-round/freezetime.
+    // Ambient track — restarts on every OnRoundFreezeEnd. The .vsndevts entry sets volume.
+    // OnRoundEnd issues "stopsound" so it cuts cleanly at the round boundary.
     "round_ambient": {
+        "SoundEvent": "ZombieMod.Ambient",
         "Volume": 0.5,
         "Files": [
             "sounds/zombie_event_ambient_sound.vsnd"
         ]
     },
 
-    // Patient Zero is identified at round start — 2 random screams from the custom pack.
+    // Patient Zero identified at round start — engine picks one of the 2 vsnd_files in the
+    // soundevent at random.
     "patient_zero": {
+        "SoundEvent": "ZombieMod.MotherScream",
         "Volume": 0.5,
         "Files": [
             "sounds/zombie_event_random_scream.vsnd",
@@ -24,7 +30,16 @@
         ]
     },
 
-    // Infected death — short groans from GFL.
+    // Survivor death — fires on OnPlayerDeath when victim was NOT infected at time of death.
+    "survivor_death": {
+        "SoundEvent": "ZombieMod.Bite",
+        "Volume": 0.5,
+        "Files": [
+            "sounds/zombie_event_bite_scream.vsnd"
+        ]
+    },
+
+    // GFL pack sounds (no .vsndevts) — use the "Files" path-based fallback.
     "infected_death": {
         "Volume": 0.5,
         "Files": [
@@ -34,8 +49,6 @@
         ]
     },
 
-    // Idle ambient — short GFL infected voices, 15-25s cadence. The "round_ambient"
-    // above is the long looping track; "infected_idle" is the occasional groan layer.
     "infected_idle": {
         "Volume": 0.5,
         "Files": [
@@ -53,14 +66,6 @@
             "sounds/zr/zombie_voice_idle12.vsnd",
             "sounds/zr/zombie_voice_idle13.vsnd",
             "sounds/zr/zombie_voice_idle14.vsnd"
-        ]
-    },
-
-    // Survivor death — fires on OnPlayerDeath when victim was NOT infected at time of death.
-    "survivor_death": {
-        "Volume": 0.5,
-        "Files": [
-            "sounds/zombie_event_bite_scream.vsnd"
         ]
     }
 }
