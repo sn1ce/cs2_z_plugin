@@ -1,3 +1,4 @@
+using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
@@ -9,6 +10,9 @@ public sealed class TeleportService
     private readonly ILogger _logger;
     private readonly ConfigService _config;
     private readonly InfectionService _infection;
+
+    /// <summary>Plugin reference required for scheduling the delayed teleport via AddTimer.</summary>
+    internal BasePlugin? Host { get; set; }
 
     public TeleportService(ILogger logger, ConfigService config, InfectionService infection)
     {
@@ -36,6 +40,12 @@ public sealed class TeleportService
         }
     }
 
+    /// <summary>
+    /// Schedules a teleport to the captured spawn position. Returns false (with reason) if any
+    /// precondition fails. Returns true after queueing — the actual teleport fires after a
+    /// 5-second delay. The cooldown + per-round-uses are consumed at queue time so a player
+    /// can't spam !ztele during the wait.
+    /// </summary>
     public bool TryTeleport(CCSPlayerController client, out string? denyReason)
     {
         denyReason = null;
@@ -76,12 +86,27 @@ public sealed class TeleportService
             return false;
         }
 
-        var pawn = client.PlayerPawn.Value;
-        if (pawn is null) { denyReason = "No pawn."; return false; }
-
-        pawn.Teleport(state.SpawnPosition, state.SpawnAngle, new Vector(0, 0, 0));
+        // Consume use + start cooldown now, so spamming !ztele during the wait is blocked.
         state.TeleportsUsedThisRound++;
         state.LastTeleportAt = DateTime.UtcNow;
+
+        // Capture the destination (and slot) now so a player moving mid-wait doesn't shift it.
+        var spawnPos = state.SpawnPosition;
+        var spawnAng = state.SpawnAngle;
+        var slot     = client.Slot;
+
+        client.PrintToChat(" \x04[ZombieMod]\x01 Teleporting in \x076\x01 seconds…");
+
+        Host?.AddTimer(5.0f, () =>
+        {
+            var fresh = Utilities.GetPlayerFromSlot(slot);
+            if (fresh is null || !fresh.IsValid || !fresh.PawnIsAlive) return;
+            var pawn = fresh.PlayerPawn.Value;
+            if (pawn is null) return;
+            pawn.Teleport(spawnPos, spawnAng, new Vector(0, 0, 0));
+            fresh.PrintToChat(" \x04[ZombieMod]\x01 Teleported to spawn.");
+        });
+
         return true;
     }
 

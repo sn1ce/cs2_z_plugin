@@ -23,7 +23,7 @@ public sealed record GameSettings
 
     public bool TeleportAllow { get; init; } = true;
     public int TeleportUsesPerRound { get; init; } = 1;
-    public float TeleportCooldownSeconds { get; init; } = 30.0f;
+    public float TeleportCooldownSeconds { get; init; } = 60.0f;
 
     public bool RespawnEnable { get; init; } = true;
     public float RespawnDelay { get; init; } = 5.0f;

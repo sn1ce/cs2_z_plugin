@@ -51,7 +51,7 @@ public sealed class ZombieModPlugin : BasePlugin
         Weapons   = new WeaponService(Logger, Config, Infection) { Host = this };
         Knockback = new KnockbackService(Logger, Config, KnockbackDetector, Infection);
         Respawn   = new RespawnService(Logger, Config, Infection) { Host = this };
-        Teleport  = new TeleportService(Logger, Config, Infection);
+        Teleport  = new TeleportService(Logger, Config, Infection) { Host = this };
         Props     = new PropService(Logger, Config);
         Sounds    = new SoundService(Logger, Config.Sounds);
         Commands  = new CommandService(Logger, Config, Infection, Respawn, Classes, Teleport, Weapons, Props) { Host = this };

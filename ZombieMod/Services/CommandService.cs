@@ -151,9 +151,9 @@ public sealed class CommandService
     public void HandleZTele(CCSPlayerController? caller, CommandInfo info)
     {
         if (caller is null || !caller.IsValid) return;
-        if (_teleport.TryTeleport(caller, out var reason))
-            info.ReplyToCommand(" [ZombieMod] Teleported.");
-        else
+        // TeleportService prints "Teleporting in Xs..." (immediate) and "Teleported." (after the
+        // delayed timer fires) itself, so on success we don't need to echo anything here.
+        if (!_teleport.TryTeleport(caller, out var reason))
             info.ReplyToCommand($" [ZombieMod] {reason}");
     }
 

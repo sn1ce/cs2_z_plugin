@@ -37,7 +37,7 @@
     // !ztele teleport.
     "TeleportAllow": true,
     "TeleportUsesPerRound": 1,
-    "TeleportCooldownSeconds": 30.0,
+    "TeleportCooldownSeconds": 60.0,
 
     // Respawn handling.
     "RespawnEnable": true,
