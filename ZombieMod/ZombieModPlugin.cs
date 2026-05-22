@@ -379,8 +379,13 @@ public sealed class ZombieModPlugin : BasePlugin
         "mp_freezetime 1",
         // Round time (minutes).
         "mp_roundtime 4",
+        // Cheats on FIRST — sv_infinite_ammo (below) is cheat-protected, so this has to land
+        // before any cvar that gates on sv_cheats. Also lets dev use `thirdperson`, noclip, etc.
+        // Overrides the image's CS2_CHEATS=0 startup arg — plugin applies after.
+        "sv_cheats 1",
         // Infinite spare ammo (mode 2). Mag still depletes → reload mechanic preserved, but
         // the reserve never runs dry. Reload pauses give infected the tactical opening.
+        // Cheat-protected → must be applied AFTER sv_cheats 1 above.
         "sv_infinite_ammo 2",
         // Bots: fill the server so workshop maps populate without players. Override your
         // compose's CS2_BOT_QUOTA=0; the cvar set runs after the image's startup.
@@ -388,9 +393,6 @@ public sealed class ZombieModPlugin : BasePlugin
         "bot_quota_mode normal",
         "bot_quota 2",
         "bot_join_after_player 0",
-        // Cheats on by default so dev can use `thirdperson`, noclip, etc.
-        // Overrides the image's CS2_CHEATS=0 startup arg — plugin applies after.
-        "sv_cheats 1",
         // Start money per spawn — lets players afford props/weapons immediately.
         "mp_startmoney 4000",
         // Buy anywhere on the map (not just in the buyzone), but only for the first 50s.

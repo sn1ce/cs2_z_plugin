@@ -16,7 +16,7 @@
     // compile cache). Falls back to "play <path>" at full volume until the .vsndevts is
     // fixed and the addon is re-published.
     "round_ambient": {
-        "SoundEvent": "zm.ambTrack",
+        "SoundEvent": "",
         "Volume": 0.4,
         "Files": [
             "sounds/zombie_event_ambient_sound.vsnd"
@@ -26,7 +26,7 @@
     // Patient Zero identified at round start — engine picks one of the 2 vsnd_files in the
     // soundevent at random.
     "patient_zero": {
-        "SoundEvent": "zm.MotherScream",
+        "SoundEvent": "",
         "Volume": 0.5,
         "Files": [
             "sounds/zombie_event_random_scream.vsnd",
@@ -36,7 +36,7 @@
 
     // Survivor death — fires on OnPlayerDeath when victim was NOT infected at time of death.
     "survivor_death": {
-        "SoundEvent": "zm.Bite",
+        "SoundEvent": "",
         "Volume": 0.5,
         "Files": [
             "sounds/zombie_event_bite_scream.vsnd"
