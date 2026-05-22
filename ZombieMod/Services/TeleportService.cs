@@ -95,7 +95,7 @@ public sealed class TeleportService
         var spawnAng = state.SpawnAngle;
         var slot     = client.Slot;
 
-        client.PrintToChat(" \x04[ZombieMod]\x01 Teleporting in \x076\x01 seconds…");
+        client.PrintToChat(" \x04[ZombieMod]\x01 Teleporting in \x075\x01 seconds…");
 
         Host?.AddTimer(5.0f, () =>
         {
