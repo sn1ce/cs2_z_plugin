@@ -273,12 +273,8 @@ public sealed class InfectionService
         var needed = Math.Max(1, (int)Math.Ceiling(alive.Count / ratio));
 
         var rng = new Random();
-        // Prefer real players over bots — fall back to bots only if not enough live players alive.
-        var realPlayers = alive.Where(p => !p.IsBot).OrderBy(_ => rng.Next()).ToList();
-        var bots        = alive.Where(p =>  p.IsBot).OrderBy(_ => rng.Next()).ToList();
-        var chosen = realPlayers.Take(needed).ToList();
-        if (chosen.Count < needed)
-            chosen.AddRange(bots.Take(needed - chosen.Count));
+        // Bots and real players are equally eligible — shuffle the whole alive pool and take.
+        var chosen = alive.OrderBy(_ => rng.Next()).Take(needed).ToList();
 
         var vetoResult = FirePatientZeroSelectedHook?.Invoke(chosen);
         if (vetoResult is HookResult.Stop)
