@@ -33,7 +33,11 @@ public sealed class SoundService
     /// </summary>
     public void Broadcast(string eventKey, CBaseEntity? sourceEntity = null)
     {
-        if (!_sounds.Events.TryGetValue(eventKey, out var entry)) return;
+        if (!_sounds.Events.TryGetValue(eventKey, out var entry))
+        {
+            _logger.LogInformation("[Sound] Broadcast({Key}) — no entry in sounds.json, skip", eventKey);
+            return;
+        }
 
         if (!string.IsNullOrEmpty(entry.SoundEvent))
         {
@@ -42,12 +46,15 @@ public sealed class SoundService
             {
                 try
                 {
-                    emitter.EmitSound(entry.SoundEvent, volume: entry.Volume);
+                    var handle = emitter.EmitSound(entry.SoundEvent, volume: entry.Volume);
+                    _logger.LogInformation(
+                        "[Sound] EmitSound({Event}) → handle={Handle} (event={Key}, vol={Vol}, emitter=#{Idx} {Designer})",
+                        entry.SoundEvent, handle, eventKey, entry.Volume, emitter.Index, emitter.DesignerName);
                     return;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "[Sound] EmitSound({Event}) failed for {Key}", entry.SoundEvent, eventKey);
+                    _logger.LogWarning(ex, "[Sound] EmitSound({Event}) THREW for {Key}", entry.SoundEvent, eventKey);
                     // fall through to play <path>
                 }
             }
@@ -57,9 +64,14 @@ public sealed class SoundService
             }
         }
 
-        if (entry.Files.Count == 0) return;
+        if (entry.Files.Count == 0)
+        {
+            _logger.LogInformation("[Sound] No Files for {Key}, silent", eventKey);
+            return;
+        }
         var path = entry.Files[_rng.Next(entry.Files.Count)];
         var cmd = $"play {path}";
+        _logger.LogInformation("[Sound] play <path> fallback for {Key}: {Cmd}", eventKey, cmd);
         foreach (var p in Utilities.GetPlayers())
         {
             if (p is null || !p.IsValid || p.IsBot || p.IsHLTV) continue;
