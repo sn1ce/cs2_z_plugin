@@ -17,7 +17,7 @@
     // fixed and the addon is re-published.
     "round_ambient": {
         "SoundEvent": "",
-        "Volume": 0.4,
+        "Volume": 0.1,
         "Files": [
             "sounds/zombie_event_ambient_sound.vsnd"
         ]
@@ -27,7 +27,7 @@
     // soundevent at random.
     "patient_zero": {
         "SoundEvent": "",
-        "Volume": 0.5,
+        "Volume": 0.1,
         "Files": [
             "sounds/zombie_event_random_scream.vsnd",
             "sounds/zombie_event_random_scream_1.vsnd"
@@ -37,7 +37,7 @@
     // Survivor death — fires on OnPlayerDeath when victim was NOT infected at time of death.
     "survivor_death": {
         "SoundEvent": "",
-        "Volume": 0.5,
+        "Volume": 0.1,
         "Files": [
             "sounds/zombie_event_bite_scream.vsnd"
         ]
@@ -45,7 +45,7 @@
 
     // GFL pack sounds (no .vsndevts) — use the "Files" path-based fallback.
     "infected_death": {
-        "Volume": 0.5,
+        "Volume": 0.1,
         "Files": [
             "sounds/zr/zombie_die1.vsnd",
             "sounds/zr/zombie_die2.vsnd",
@@ -54,7 +54,7 @@
     },
 
     "infected_idle": {
-        "Volume": 0.5,
+        "Volume": 0.1,
         "Files": [
             "sounds/zr/zombie_voice_idle1.vsnd",
             "sounds/zr/zombie_voice_idle2.vsnd",

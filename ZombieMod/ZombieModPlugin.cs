@@ -62,7 +62,10 @@ public sealed class ZombieModPlugin : BasePlugin
         // route straight to the service (which fires) so events never raise twice.
         Infection.FireInfectHook         = (c, a, pz, f) =>
         {
-            Sounds.Broadcast(pz ? "patient_zero" : "infect");
+            // Patient Zero scream spatializes from the chosen client's pawn (so other players
+            // hear the direction). The "infect" event (regular knife-infect) isn't defined
+            // in sounds.json today — Broadcast no-ops on missing keys.
+            Sounds.Broadcast(pz ? "patient_zero" : "infect", c.PlayerPawn.Value);
             return Api.RaiseClientInfect(c, a, pz, f);
         };
         Infection.FireHumanizeHook       = Api.RaiseClientHumanize;
@@ -215,7 +218,11 @@ public sealed class ZombieModPlugin : BasePlugin
         {
             Classes.OnPlayerDeath(victim);
             Respawn.ScheduleRespawn(victim);
-            Sounds.Broadcast(Infection.IsClientInfected(victim) ? "infected_death" : "survivor_death");
+            // Survivor death (bite) spatializes from the dying player's pawn so nearby
+            // zombies hear the directional cue. Infected death uses the GFL path-based
+            // sounds (no SoundEvent yet) — sourceEntity is moot for play <path> fallback.
+            Sounds.Broadcast(Infection.IsClientInfected(victim) ? "infected_death" : "survivor_death",
+                             victim.PlayerPawn.Value);
         }
         return HookResult.Continue;
     }

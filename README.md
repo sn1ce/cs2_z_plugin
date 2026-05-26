@@ -141,6 +141,7 @@ These must be installed for ZombieMod to function:
 | **CounterStrikeSharp** ≥ v1.0.355 | Metamod plugin | https://github.com/roflmuffin/CounterStrikeSharp | Plugin runtime ZombieMod targets |
 | **MovementUnlocker** | Metamod plugin | https://github.com/Source2ZE/MovementUnlocker | Enables velocity writes — needed for knockback to actually push players |
 | **MultiAddonManager** | Metamod plugin | https://github.com/Source2ZE/MultiAddonManager | Mounts Steam Workshop content (models, sounds, maps) at runtime |
+| **CS2-EmitSoundVolumeFix** | CSSharp plugin | https://github.com/samyycX/CS2-EmitSoundVolumeFix | Fixes a vanilla CS2 bug where the `volume` parameter on `EmitSound` was silently ignored. Required for the `sounds.json → Volume` field to actually attenuate audio at runtime |
 
 CS2 auto-updates occasionally overwrite `gameinfo.gi`, removing the Metamod search-path line. If `meta` becomes an "Unknown command" after a patch, re-inject the line and restart.
 
