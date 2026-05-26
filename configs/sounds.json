@@ -15,9 +15,15 @@
     // addon's .vsndevts_c (Mother + Bite events made it, Ambient didn't — likely a stale
     // compile cache). Falls back to "play <path>" at full volume until the .vsndevts is
     // fixed and the addon is re-published.
+    // Ambient: SoundEvent left empty because zm.ambTrack (type=csgo_default) is silent for
+    // reasons we never untangled — engine accepts the emit, returns a valid handle, but
+    // produces no audible output regardless of which entity we emit from. Falls back to
+    // play <path> at full volume. Workaround: lower the source .wav amplitude in Audacity
+    // if you eventually want it quieter; or wait for an updated EmitSoundVolumeFix +
+    // change the .vsndevts type to cs_player_footstep (positional).
     "round_ambient": {
-        "SoundEvent": "zm.ambTrack",
-        "Volume": 0.1,
+        "SoundEvent": "",
+        "Volume": 1.0,
         "Files": [
             "sounds/zombie_event_ambient_sound.vsnd"
         ]
