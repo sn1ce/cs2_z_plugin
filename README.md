@@ -219,6 +219,7 @@ All six JSON files live in `configs/` and deploy to `addons/counterstrikesharp/c
 | `hitgroups.json` | Per-hitbox knockback multipliers |
 | `props.json` | Spawnable props for `!prop` — display name, model path, cost |
 | `sounds.json` | Event → (Volume, Files[]) — paths reference MAM-mounted Workshop content |
+| `cvars.json` | Ordered list of required cvars (`sv_cheats 1`, `mp_buy_anywhere 1`, etc.) + re-apply schedule. Edit + `css_zreload` to tune without rebuilding |
 
 `!zreload` hot-reloads all six. Plugin DLL changes still need `css_plugins reload ZombieMod`.
 

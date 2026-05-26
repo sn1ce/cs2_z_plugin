@@ -76,9 +76,8 @@ public sealed class ZombieModPlugin : BasePlugin
 
         Weapons.RegisterPurchaseCommands();
 
-        // Required cvars: our README documents these, but relying on the user to `exec` a
-        // cfg file is brittle (e.g. casual mode's auto-balance fights with our team shuffle).
-        // Self-applying at Load + every map start keeps gameplay stable.
+        // Required cvars: loaded from configs/cvars.json. Self-applying at Load + every map
+        // start keeps gameplay stable against casual mode's gamemode_server.cfg overrides.
         ApplyRequiredCvars();
         EnsureWarmupEnded();
         RegisterListener<OnMapStart>(_ =>
@@ -86,9 +85,9 @@ public sealed class ZombieModPlugin : BasePlugin
             ApplyRequiredCvars();
             EnsureWarmupEnded();
             // sv_cheats + buy cvars get clobbered by casual's gamemode_server.cfg AFTER our
-            // OnMapStart applies them. Re-apply on a delay so our values stick.
-            AddTimer(5.0f, () => ApplyRequiredCvars());
-            AddTimer(15.0f, () => ApplyRequiredCvars());
+            // OnMapStart applies them. Re-apply on each configured delay so our values stick.
+            foreach (var delay in Config.Cvars.ReapplyDelaysSeconds)
+                AddTimer(delay, () => ApplyRequiredCvars());
 
             // Precache happens via the OnServerPrecacheResources listener (manifest.AddResource).
             // Earlier hidden-dummy hack didn't pin anything — verified via deep research against
@@ -351,68 +350,6 @@ public sealed class ZombieModPlugin : BasePlugin
     private string ResolveAddonsDir()
         => Path.GetFullPath(Path.Combine(ModuleDirectory, "..", "..", ".."));
 
-    private static readonly string[] RequiredCvars =
-    [
-        // Pin to Casual. changelevel without args inherits current game_type/game_mode, and
-        // something (workshop map cfg? gamemode_server.cfg?) flips us into Deathmatch otherwise.
-        "game_type 0",
-        "game_mode 0",
-        "mp_limitteams 0",
-        "mp_autoteambalance 0",
-        "mp_disconnect_kills_players 1",
-        // 0 lets the newly-infected player phase through the infected that knifed them, so they
-        // never get stuck inside each other's hitbox at the moment of team-switch.
-        "mp_solid_teammates 0",
-        "mp_teammates_are_enemies 0",
-        "mp_ignore_round_win_conditions 1",
-        "mp_give_player_c4 0",
-        // We rely on CS2's native round-end detection: when the last alive CT is infected we
-        // SwitchTeam them to T, which makes CS2 see 0 CTs alive and end the round naturally.
-        // Setting this to 1 breaks our SwitchTeam-based round-end detection.
-        "mp_ignore_round_win_conditions 0",
-        // Disable warmup as aggressively as we can — casual mode's gamemode cfg re-enables
-        // pausetimer, so we need to clear it explicitly each map start.
-        "mp_warmuptime 0",
-        "mp_warmup_pausetimer 0",
-        "mp_warmup_offline_enabled 0",
-        // Short freezetime for faster testing iteration.
-        "mp_freezetime 1",
-        // Round time (minutes).
-        "mp_roundtime 4",
-        // Cheats on FIRST — sv_infinite_ammo (below) is cheat-protected, so this has to land
-        // before any cvar that gates on sv_cheats. Also lets dev use `thirdperson`, noclip, etc.
-        // Overrides the image's CS2_CHEATS=0 startup arg — plugin applies after.
-        "sv_cheats 1",
-        // Infinite spare ammo (mode 2). Mag still depletes → reload mechanic preserved, but
-        // the reserve never runs dry. Reload pauses give infected the tactical opening.
-        // Cheat-protected → must be applied AFTER sv_cheats 1 above.
-        "sv_infinite_ammo 2",
-        // Bots: fill the server so workshop maps populate without players. Override your
-        // compose's CS2_BOT_QUOTA=0; the cvar set runs after the image's startup.
-        // Always 2 bots regardless of player count — gives a default testing buddy on solo.
-        "bot_quota_mode normal",
-        "bot_quota 2",
-        "bot_join_after_player 0",
-        // Start money per spawn — lets players afford props/weapons immediately.
-        "mp_startmoney 4000",
-        // Buy anywhere on the map (not just in the buyzone), but only for the first 50s.
-        "mp_buy_anywhere 1",
-        "mp_buytime 50",
-        // Disable CS2's own match-end pipeline. The plugin owns map rotation via
-        // GameSettings.MapRotation + MaxRoundsPerMap (see InfectionService.OnRoundEnd), so we
-        // never want CS2 to auto-LOOPDEACTIVATE on its own round-count trigger.
-        "mp_maxrounds 9999",
-        "mp_match_can_clinch 0",
-        "mp_match_end_changelevel 0",
-        "mp_match_end_restart 1",
-        "mp_halftime 0",
-        "mp_overtime_enable 0",
-        // mp_warmup_end fires at runtime from EnsureWarmupEnded() — issuing it inline at Load
-        // is a no-op because warmup hasn't been entered yet.
-        // (Frame-spike profiler spam can't be silenced via cvar in current CS2 builds —
-        //  prof_dumpoverrun was removed/renamed. Lives in the log noise for now.)
-        "developer 0",
-    ];
 
     private readonly Random _idleRng = new();
 
@@ -447,7 +384,7 @@ public sealed class ZombieModPlugin : BasePlugin
 
     private void ApplyRequiredCvars()
     {
-        foreach (var cmd in RequiredCvars)
+        foreach (var cmd in Config.Cvars.RequiredCvars)
             Server.ExecuteCommand(cmd);
     }
 

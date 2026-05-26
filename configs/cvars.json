@@ -1,0 +1,75 @@
+{
+    // Cvars the plugin pins on every map start AND again at +5s / +15s so casual mode's
+    // gamemode_server.cfg can't clobber them. Order matters — sv_cheats must land before
+    // any cheat-protected cvar (sv_infinite_ammo, etc.).
+    //
+    // Edit this file and run "css_zreload" in chat; the plugin re-applies on the next
+    // tick. Map start (or "changelevel de_dust2" from webcon) gives you a fresh slate.
+
+    "RequiredCvars": [
+        // ── Mode / lobby ─────────────────────────────────────────────────────────
+        // Pin to Casual. changelevel without args inherits current values and
+        // something (workshop map cfg? gamemode_server.cfg?) flips us into Deathmatch.
+        "game_type 0",
+        "game_mode 0",
+
+        // ── Team / damage rules ──────────────────────────────────────────────────
+        "mp_limitteams 0",
+        "mp_autoteambalance 0",
+        "mp_disconnect_kills_players 1",
+        // 0 lets the newly-infected phase through the infected that knifed them.
+        "mp_solid_teammates 0",
+        "mp_teammates_are_enemies 0",
+        // Plugin owns round-end detection via SwitchTeam → CS2's native check fires.
+        "mp_ignore_round_win_conditions 0",
+        "mp_give_player_c4 0",
+
+        // ── Warmup / round timing ────────────────────────────────────────────────
+        "mp_warmuptime 0",
+        "mp_warmup_pausetimer 0",
+        "mp_warmup_offline_enabled 0",
+        // Short freezetime for faster iteration.
+        "mp_freezetime 1",
+        // Round time (minutes).
+        "mp_roundtime 4",
+
+        // ── Cheats + ammo (ORDER-SENSITIVE) ──────────────────────────────────────
+        // sv_cheats MUST come before any cheat-protected cvar below, otherwise the
+        // engine rejects them as cheat-protected at apply time.
+        "sv_cheats 1",
+        // Infinite reserve, mag still depletes → reload mechanic preserved. Cheat-protected.
+        "sv_infinite_ammo 2",
+
+        // ── Bots ─────────────────────────────────────────────────────────────────
+        // bot_quota 2 = default testing buddies on solo. Override the image's
+        // CS2_BOT_QUOTA=0 startup arg — plugin applies after.
+        "bot_quota_mode normal",
+        "bot_quota 2",
+        "bot_join_after_player 0",
+
+        // ── Economy / buy ────────────────────────────────────────────────────────
+        // Plugin treats StartMoney (gamesettings.json) as a floor — only tops up below this.
+        "mp_startmoney 4000",
+        // Buy anywhere on the map, first 50s of each round.
+        "mp_buy_anywhere 1",
+        "mp_buytime 50",
+
+        // ── Match-end pipeline (plugin owns rotation) ────────────────────────────
+        // Never let CS2 auto-end the match — gamesettings.json → MapRotation handles it.
+        "mp_maxrounds 9999",
+        "mp_match_can_clinch 0",
+        "mp_match_end_changelevel 0",
+        "mp_match_end_restart 1",
+        "mp_halftime 0",
+        "mp_overtime_enable 0",
+
+        // ── Misc ─────────────────────────────────────────────────────────────────
+        // Quieter console; flip to 1 if you want CS2's developer-level prints.
+        "developer 0"
+    ],
+
+    // Seconds after OnMapStart to re-apply the cvars above. Casual's gamemode cfg loads
+    // shortly after our hook fires and overwrites some of our values, so we re-clobber
+    // them. Empty list = no delayed re-apply (only at map start).
+    "ReapplyDelaysSeconds": [ 5, 15 ]
+}

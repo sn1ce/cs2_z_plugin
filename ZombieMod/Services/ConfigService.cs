@@ -19,6 +19,7 @@ public sealed class ConfigService
     public IReadOnlyDictionary<string, PropConfig> Props { get; private set; }
         = new Dictionary<string, PropConfig>();
     public SoundConfig Sounds { get; private set; } = new();
+    public CvarConfig Cvars { get; private set; } = new();
 
     /// <summary>Weapon lookup keyed by entity name (e.g. <c>weapon_ak47</c>) — built at load time.</summary>
     public IReadOnlyDictionary<string, WeaponConfig> WeaponsByEntity { get; private set; }
@@ -51,6 +52,7 @@ public sealed class ConfigService
         var hitgrp   = LoadDict<HitgroupConfig>("hitgroups.json");
         var props    = LoadDict<PropConfig>("props.json");
         var sounds   = LoadSounds("sounds.json");
+        var cvars    = LoadFile<CvarConfig>("cvars.json");
 
         GameSettings = settings ?? new GameSettings();
         Weapons      = weapons;
@@ -58,6 +60,7 @@ public sealed class ConfigService
         Hitgroups    = hitgrp;
         Props        = props;
         Sounds       = sounds;
+        Cvars        = cvars ?? new CvarConfig();
 
         WeaponsByEntity = BuildWeaponEntityIndex(Weapons);
         HitgroupsByIndex = Hitgroups.Values
