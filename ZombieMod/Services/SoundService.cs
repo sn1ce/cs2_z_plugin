@@ -41,30 +41,44 @@ public sealed class SoundService
 
         if (!string.IsNullOrEmpty(entry.SoundEvent))
         {
-            var emitter = (sourceEntity is { IsValid: true }) ? sourceEntity : ResolveWorldEntity();
-            if (emitter is not null)
+            // Two emission paths:
+            //   - sourceEntity provided (e.g. patient zero pawn): emit from that entity so a
+            //     positional soundevent (cs_player_footstep type) spatializes correctly.
+            //   - sourceEntity null: emit from EACH connected human player's pawn. Worldent-emit
+            //     turned out to be silent for csgo_default events (engine returns a handle but
+            //     plays nothing audible), so we use per-player emits as a 2D-ish broadcast.
+            try
             {
-                try
+                if (sourceEntity is { IsValid: true })
                 {
-                    // Don't pass volume — passing any non-default value seems to break playback
-                    // entirely (engine returns a valid handle but emits silent). Until we have
-                    // a working CS2-EmitSoundVolumeFix matched to the current build, we rely on
-                    // the volume baked into the .vsndevts entry.
-                    var handle = emitter.EmitSound(entry.SoundEvent);
+                    var handle = sourceEntity.EmitSound(entry.SoundEvent);
                     _logger.LogInformation(
                         "[Sound] EmitSound({Event}) → handle={Handle} (event={Key}, baked-vol, emitter=#{Idx} {Designer})",
-                        entry.SoundEvent, handle, eventKey, emitter.Index, emitter.DesignerName);
+                        entry.SoundEvent, handle, eventKey, sourceEntity.Index, sourceEntity.DesignerName);
                     return;
                 }
-                catch (Exception ex)
+
+                var emittedFromCount = 0;
+                foreach (var p in Utilities.GetPlayers())
                 {
-                    _logger.LogWarning(ex, "[Sound] EmitSound({Event}) THREW for {Key}", entry.SoundEvent, eventKey);
-                    // fall through to play <path>
+                    if (p is null || !p.IsValid || p.IsBot || p.IsHLTV) continue;
+                    var pawn = p.PlayerPawn.Value;
+                    if (pawn is null || !pawn.IsValid) continue;
+                    try { pawn.EmitSound(entry.SoundEvent); emittedFromCount++; } catch { }
                 }
+                if (emittedFromCount > 0)
+                {
+                    _logger.LogInformation("[Sound] EmitSound({Event}) broadcast to {N} pawns (event={Key}, baked-vol)",
+                        entry.SoundEvent, emittedFromCount, eventKey);
+                    return;
+                }
+                _logger.LogWarning("[Sound] No live human pawns for {Key} ({Event}) — falling back to play <path>",
+                    eventKey, entry.SoundEvent);
             }
-            else
+            catch (Exception ex)
             {
-                _logger.LogWarning("[Sound] No emitter for {Key} ({Event}) — falling back to play <path>", eventKey, entry.SoundEvent);
+                _logger.LogWarning(ex, "[Sound] EmitSound({Event}) THREW for {Key}", entry.SoundEvent, eventKey);
+                // fall through to play <path>
             }
         }
 

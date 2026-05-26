@@ -27,7 +27,7 @@
         "Knockback": 5.0,
         "Speed": 300.0,
         "Scale": 1.2,
-        "RenderR": 220, "RenderG": 40, "RenderB": 40
+        "RenderR": 255, "RenderG": 255, "RenderB": 255
     },
     "patient_zero": {
         "Name": "Patient Zero",
@@ -42,6 +42,6 @@
         "Knockback": 5.0,
         "Speed": 300.0,
         "Scale": 1.3,
-        "RenderR": 230, "RenderG": 25, "RenderB": 25
+        "RenderR": 255, "RenderG": 255, "RenderB": 255
     }
 }
