@@ -15,15 +15,20 @@ namespace ZombieMod.Services;
 public sealed class SoundService
 {
     private readonly ILogger _logger;
-    private readonly SoundConfig _sounds;
+    private readonly ConfigService _config;
     private readonly Random _rng = new();
     private CWorld? _worldEntCache;
 
-    public SoundService(ILogger logger, SoundConfig sounds)
+    /// <summary>Take ConfigService (not a SoundConfig snapshot) so css_zreload picks up.
+    /// The previous design captured the original SoundConfig instance; the new one
+    /// returned by ConfigService.Reload() was unreachable from here.</summary>
+    public SoundService(ILogger logger, ConfigService config)
     {
         _logger = logger;
-        _sounds = sounds;
+        _config = config;
     }
+
+    private SoundConfig Sounds => _config.Sounds;
 
     /// <summary>
     /// Play one of the sounds bucketed under <paramref name="eventKey"/>. If
@@ -33,7 +38,7 @@ public sealed class SoundService
     /// </summary>
     public void Broadcast(string eventKey, CBaseEntity? sourceEntity = null)
     {
-        if (!_sounds.Events.TryGetValue(eventKey, out var entry))
+        if (!Sounds.Events.TryGetValue(eventKey, out var entry))
         {
             _logger.LogInformation("[Sound] Broadcast({Key}) — no entry in sounds.json, skip", eventKey);
             return;
