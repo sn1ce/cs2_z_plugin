@@ -46,10 +46,14 @@ public sealed class SoundService
             {
                 try
                 {
-                    var handle = emitter.EmitSound(entry.SoundEvent, volume: entry.Volume);
+                    // Don't pass volume — passing any non-default value seems to break playback
+                    // entirely (engine returns a valid handle but emits silent). Until we have
+                    // a working CS2-EmitSoundVolumeFix matched to the current build, we rely on
+                    // the volume baked into the .vsndevts entry.
+                    var handle = emitter.EmitSound(entry.SoundEvent);
                     _logger.LogInformation(
-                        "[Sound] EmitSound({Event}) → handle={Handle} (event={Key}, vol={Vol}, emitter=#{Idx} {Designer})",
-                        entry.SoundEvent, handle, eventKey, entry.Volume, emitter.Index, emitter.DesignerName);
+                        "[Sound] EmitSound({Event}) → handle={Handle} (event={Key}, baked-vol, emitter=#{Idx} {Designer})",
+                        entry.SoundEvent, handle, eventKey, emitter.Index, emitter.DesignerName);
                     return;
                 }
                 catch (Exception ex)
