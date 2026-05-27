@@ -219,6 +219,20 @@ public sealed class ZombieModPlugin : BasePlugin
             return HookResult.Continue;
         });
 
+        // mp_restartgame intercept: EventRoundStart is unreliable in this plugin context
+        // (verified earlier — round_start handlers silently fail to fire), so the OnRoundStart
+        // reset that normally clears IsInfected + force-switches everyone to CT never runs
+        // after a restart. Without this listener, a zombie running mp_restartgame respawned
+        // as a zombie because their PlayerState still had IsInfected=true and
+        // InfectionStarted was still true → ResolvePostSpawnAction returned Infect.
+        // Calling Infection.OnRoundStart() here resets state synchronously BEFORE the
+        // engine respawns players, so they spawn as survivors on CT.
+        AddCommandListener("mp_restartgame", (_, _) =>
+        {
+            Infection.OnRoundStart();
+            return HookResult.Continue;
+        });
+
         // Block weapon pickup for infected at the engine level. The previous reactive
         // approach (OnItemPickup → drop) caused a pickup-drop loop: the zombie picked
         // up → we dropped at their feet → they walked over it next tick → loop. During
