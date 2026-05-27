@@ -55,6 +55,10 @@
     // "hostage_entity" and kills them 0.1s after spawn.
     "RemoveHostages": true,
 
+    // Turn every human player's flashlight ON automatically on each spawn. They can still
+    // press E or type !fl to toggle it off. Bots are skipped (they'd never use it).
+    "FlashlightDefaultOn": true,
+
     // After this many rounds the plugin rotates to the next entry in MapRotation.
     "MaxRoundsPerMap": 15,
 

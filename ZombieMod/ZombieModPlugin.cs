@@ -280,6 +280,17 @@ public sealed class ZombieModPlugin : BasePlugin
         // Capture spawn position after CS2 finishes placing the pawn.
         var captured = client;
         AddTimer(0.2f, () => Teleport.OnPlayerSpawn(captured));
+
+        // Auto-enable flashlight on spawn (config-gated). Tiny delay so the pawn is fully
+        // alive when EnsureOn runs its IsValid/PawnIsAlive check.
+        if (Config.GameSettings.FlashlightDefaultOn && !client.IsBot)
+        {
+            AddTimer(0.3f, () =>
+            {
+                if (captured.IsValid && captured.PawnIsAlive)
+                    Flashlight.EnsureOn(captured);
+            });
+        }
         return HookResult.Continue;
     }
 

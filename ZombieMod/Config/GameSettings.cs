@@ -41,6 +41,10 @@ public sealed record GameSettings
     /// paths, AI noise). Default true.</summary>
     public bool RemoveHostages { get; init; } = true;
 
+    /// <summary>If true, every human player's flashlight is turned ON automatically on each
+    /// spawn. They can still toggle it off via !fl or pressing E. Bots are skipped.</summary>
+    public bool FlashlightDefaultOn { get; init; } = true;
+
     /// <summary>Cash floor at the start of each round. Players with less get bumped up to this.
     /// Players with more keep what they earned.</summary>
     public int StartMoney { get; init; } = 4000;

@@ -59,6 +59,14 @@ public sealed class FlashlightService
         return true;
     }
 
+    /// <summary>Idempotently ensure the flashlight is ON for this client. Used by
+    /// auto-enable-on-spawn so we don't accidentally toggle it off if it was already on.</summary>
+    public void EnsureOn(CCSPlayerController client)
+    {
+        if (!client.IsValid || !client.PawnIsAlive || client.IsBot || client.IsHLTV) return;
+        _wantOn.Add(client.Slot);   // HashSet.Add no-ops if already present
+    }
+
     /// <summary>
     /// Called from the plugin's OnTick listener. Walks every player with flashlight ON
     /// and re-positions their light to follow their head + view direction. Creates the
