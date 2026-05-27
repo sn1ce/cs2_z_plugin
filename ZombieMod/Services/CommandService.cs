@@ -139,8 +139,48 @@ public sealed class CommandService
 
     public void HandleZClass(CCSPlayerController? caller, CommandInfo info)
     {
-        if (caller is null || !caller.IsValid) return;
-        info.ReplyToCommand(" [ZombieMod] Class picker is not implemented yet — set classes via gamesettings.");
+        if (caller is null || !caller.IsValid || Host is null) return;
+
+        // Picker shows every Team:0 class with PatientZero:false. Patient Zero is excluded
+        // (it's auto-assigned at round start). The selection persists in PlayerState across
+        // rounds and applies on the player's next infect/respawn.
+        var picker = _config.Classes
+            .Where(kv => kv.Value.Enable && kv.Value.Team == 0 && !kv.Value.PatientZero)
+            .OrderBy(kv => kv.Value.Health)   // light → heavy reads nicely
+            .ToList();
+
+        if (picker.Count == 0)
+        {
+            info.ReplyToCommand(" [ZombieMod] No picker-eligible classes in classes.json.");
+            return;
+        }
+
+        var state = _infection.GetState(caller);
+        var currentId = state?.PreferredInfectedClass ?? _config.GameSettings.DefaultInfectedBuffer;
+        var menu = new WasdMenu("Pick your infected class", Host);
+
+        var startIdx = 0;
+        for (var i = 0; i < picker.Count; i++)
+        {
+            var (id, cls) = picker[i];
+            if (id == currentId) startIdx = i;
+            var label = $"{cls.Name} — HP {cls.Health}, spd {cls.Speed:F0}, kb {cls.Knockback:F1}{(id == currentId ? " (current)" : "")}";
+            var capturedId = id;
+            var capturedName = cls.Name;
+            menu.AddItem(label, (client, _) =>
+            {
+                var st = _infection.GetState(client);
+                if (st is null)
+                {
+                    client.PrintToChat(" \x04[ZombieMod]\x01 Could not record class (no state).");
+                    return;
+                }
+                st.PreferredInfectedClass = capturedId;
+                client.PrintToChat(
+                    $" \x04[ZombieMod]\x01 Class set to \x07{capturedName}\x01 — applies on your next infect/respawn.");
+            });
+        }
+        menu.Display(caller, startIdx);
     }
 
     public void HandleReload(CCSPlayerController? caller, CommandInfo info)

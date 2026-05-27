@@ -16,6 +16,11 @@ public sealed class PlayerState
     public bool IsInfected { get; set; }
     public bool IsPatientZero { get; set; }
 
+    /// <summary>Player's chosen infected class (from the !zclass picker). Persists across
+    /// rounds; null means fall back to <c>GameSettings.DefaultInfectedBuffer</c> on infect.
+    /// Patient Zero always uses <c>PatientZeroBuffer</c> and ignores this preference.</summary>
+    public string? PreferredInfectedClass { get; set; }
+
     public ClassConfig? ActiveClass { get; set; }
 
     public int TeleportsUsedThisRound { get; set; }

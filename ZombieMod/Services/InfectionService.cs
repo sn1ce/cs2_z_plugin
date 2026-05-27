@@ -325,9 +325,24 @@ public sealed class InfectionService
         // Infected are melee-only — strip all weapons except the knife.
         StripWeapons(client, keepKnife: true);
 
-        var classId = patientZero
-            ? _config.GameSettings.PatientZeroBuffer
-            : _config.GameSettings.DefaultInfectedBuffer;
+        // Resolve the class to apply: Patient Zero always gets the PatientZeroBuffer; regular
+        // infects honor the player's PreferredInfectedClass from !zclass (if set + still valid),
+        // otherwise fall back to DefaultInfectedBuffer.
+        string classId;
+        if (patientZero)
+        {
+            classId = _config.GameSettings.PatientZeroBuffer;
+        }
+        else if (!string.IsNullOrEmpty(state.PreferredInfectedClass)
+                 && _config.Classes.TryGetValue(state.PreferredInfectedClass, out var prefCls)
+                 && prefCls.Team == 0 && !prefCls.PatientZero)
+        {
+            classId = state.PreferredInfectedClass;
+        }
+        else
+        {
+            classId = _config.GameSettings.DefaultInfectedBuffer;
+        }
 
         if (_config.Classes.TryGetValue(classId, out var cls))
         {
