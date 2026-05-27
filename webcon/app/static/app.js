@@ -94,7 +94,56 @@
 
   // ----- workshop input wiring (shared logic) -----------------------------
 
-  function wireWorkshop(inputEl, btnEl, sendFn) {
+  // Fetch + render recent workshop maps into a <select>. When the user picks
+  // an entry, we populate the adjacent ID input (and re-run its validator so
+  // the Change Map button enables itself). We deliberately do NOT auto-submit
+  // — the user still hits Change Map themselves, matching the manual-typed
+  // input flow exactly.
+  async function loadWorkshopHistory(selectEl, inputEl) {
+    if (!selectEl) return;
+    const token = getToken();
+    let items = [];
+    try {
+      const resp = await fetch(`/api/workshop-maps?token=${encodeURIComponent(token)}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      items = (data && data.items) || [];
+    } catch (_) { return; }
+    // Rebuild options; keep a placeholder first row that resets the input.
+    selectEl.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = items.length
+      ? `RECENT MAPS (${items.length})…`
+      : "NO RECENT MAPS";
+    selectEl.appendChild(placeholder);
+    for (const it of items) {
+      const opt = document.createElement("option");
+      opt.value = it.id;
+      // Show "<id> — <name>"; name is either real or the "(unknown — ID …)"
+      // placeholder served by the API while Steam catches up.
+      opt.textContent = `${it.id} — ${it.name || "(unknown)"}`;
+      selectEl.appendChild(opt);
+    }
+  }
+
+  function wireWorkshopHistory(selectEl, inputEl) {
+    if (!selectEl || !inputEl) return;
+    selectEl.addEventListener("change", () => {
+      const v = selectEl.value;
+      if (!v) return;
+      inputEl.value = v;
+      // Trigger the existing input validator (enables the Change Map button).
+      inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+      inputEl.focus();
+      // Reset the select back to the placeholder so picking the same row again
+      // still fires a change event next time.
+      selectEl.selectedIndex = 0;
+    });
+  }
+
+  function wireWorkshop(inputEl, btnEl, sendFn, opts = {}) {
+    const onChanged = typeof opts.onChanged === "function" ? opts.onChanged : null;
     const refresh = () => {
       const v = inputEl.value.trim();
       btnEl.disabled = !/^\d+$/.test(v);
@@ -113,6 +162,11 @@
       sendFn(`host_workshop_map ${v}`);
       inputEl.value = "";
       refresh();
+      // Backend records + fires Steam fetch; give it ~600ms (one round-trip
+      // budget) then refresh the dropdown so the new entry shows up. The fetch
+      // may not have resolved yet — that's fine, the API will retry on the
+      // next list call until the name lands.
+      if (onChanged) setTimeout(onChanged, 600);
     });
     refresh();
   }
@@ -219,7 +273,13 @@
       });
     });
     $("#clear").addEventListener("click", () => { logEl.innerHTML = ""; });
-    wireWorkshop($("#ws-workshop"), $("#ws-workshop-btn"), sendCmd);
+    const wsHistorySelect = $("#ws-workshop-history");
+    const wsHistoryInput = $("#ws-workshop");
+    wireWorkshopHistory(wsHistorySelect, wsHistoryInput);
+    wireWorkshop(wsHistoryInput, $("#ws-workshop-btn"), sendCmd, {
+      onChanged: () => loadWorkshopHistory(wsHistorySelect, wsHistoryInput),
+    });
+    loadWorkshopHistory(wsHistorySelect, wsHistoryInput);
     consolePane.classList.remove("hidden");
     connectConsole(serverId);
   }
@@ -522,7 +582,13 @@
     document.querySelectorAll("#dashboard .quick button[data-cmd]").forEach((btn) => {
       btn.addEventListener("click", () => sendBroadcast(btn.dataset.cmd));
     });
-    wireWorkshop($("#bc-workshop"), $("#bc-workshop-btn"), sendBroadcast);
+    const bcHistorySelect = $("#bc-workshop-history");
+    const bcHistoryInput = $("#bc-workshop");
+    wireWorkshopHistory(bcHistorySelect, bcHistoryInput);
+    wireWorkshop(bcHistoryInput, $("#bc-workshop-btn"), sendBroadcast, {
+      onChanged: () => loadWorkshopHistory(bcHistorySelect, bcHistoryInput),
+    });
+    loadWorkshopHistory(bcHistorySelect, bcHistoryInput);
     $("#bc-form").addEventListener("submit", (ev) => {
       ev.preventDefault();
       const v = bcCmd.value.trim();

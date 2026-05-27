@@ -123,9 +123,28 @@ public sealed class ZombieModPlugin : BasePlugin
 
         // Per-weapon Clip + Reserve must be applied at entity-creation time. Hooking
         // EventItemPickup is too late — CS2's pickup logic overrides our writes.
+        // Also handles RemoveHostages on cs_* maps: kills hostage_entity 0.1s after spawn.
         RegisterListener<OnEntityCreated>(entity =>
         {
             if (entity is null || !entity.IsValid) return;
+
+            // Hostage strip — runs on every map. cs_* maps spawn hostage_entity instances at
+            // round start; we kill them so CTs can't auto-win on rescue and the AI doesn't
+            // wander into infected paths. Toggle via gamesettings.RemoveHostages.
+            if (Config.GameSettings.RemoveHostages
+                && entity.DesignerName.Equals("hostage_entity", StringComparison.OrdinalIgnoreCase))
+            {
+                var hostage = entity;
+                AddTimer(0.1f, () =>
+                {
+                    if (hostage.IsValid)
+                    {
+                        try { hostage.AddEntityIOEvent("Kill", hostage, null, "", 0.0f); } catch { }
+                    }
+                });
+                return;
+            }
+
             if (!entity.DesignerName.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase)) return;
             if (entity.DesignerName.Contains("knife", StringComparison.OrdinalIgnoreCase)) return;
 

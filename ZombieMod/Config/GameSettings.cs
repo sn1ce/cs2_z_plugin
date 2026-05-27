@@ -35,6 +35,12 @@ public sealed record GameSettings
     /// <summary>Per-class speed override (Speed in classes.json applied as VelocityModifier).</summary>
     public bool EnableClassSpeed { get; init; } = true;
 
+    /// <summary>If true, the plugin kills any <c>hostage_entity</c> the engine spawns. Use
+    /// when cycling through hostage maps (cs_*) — keeps the round clean of NPCs that would
+    /// otherwise interfere with zombie gameplay (CTs auto-win on rescue, hostages blocking
+    /// paths, AI noise). Default true.</summary>
+    public bool RemoveHostages { get; init; } = true;
+
     /// <summary>Cash floor at the start of each round. Players with less get bumped up to this.
     /// Players with more keep what they earned.</summary>
     public int StartMoney { get; init; } = 4000;

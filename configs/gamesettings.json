@@ -50,6 +50,11 @@
     // Flip false if you see weapon-attachment glitches that correlate with speed swaps.
     "EnableClassSpeed": true,
 
+    // Strip hostages on cs_* maps so they don't interfere with zombie rounds (NPCs blocking
+    // paths, CTs auto-winning on rescue, AI noise). Plugin watches OnEntityCreated for
+    // "hostage_entity" and kills them 0.1s after spawn.
+    "RemoveHostages": true,
+
     // After this many rounds the plugin rotates to the next entry in MapRotation.
     "MaxRoundsPerMap": 15,
 
