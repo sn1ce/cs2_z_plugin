@@ -59,6 +59,13 @@
     // press E or type !fl to toggle it off. Bots are skipped (they'd never use it).
     "FlashlightDefaultOn": true,
 
+    // Molotov / incendiary fire slows infected. 0.5 = half class speed while burning;
+    // 1.0 disables. Duration in seconds is how long the slow lingers after the LAST fire
+    // damage tick (fire ticks ~4/sec, so 1.5s easily covers in-fire dwell). When the
+    // infected escapes the inferno, the slow expires and class speed is restored.
+    "MolotovSlowMultiplier": 0.5,
+    "MolotovSlowDurationSeconds": 1.5,
+
     // After this many rounds the plugin rotates to the next entry in MapRotation.
     "MaxRoundsPerMap": 15,
 

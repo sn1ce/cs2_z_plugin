@@ -35,10 +35,16 @@ public sealed class PlayerState
 
     public DateTime? NapalmExpiresAt { get; set; }
 
+    /// <summary>Set by ClassService.ApplyMolotovBurn on each inferno/molotov damage tick.
+    /// While now &lt; MolotovSlowUntil the player's VelocityModifier is held at the slowed
+    /// value; after expiry ClassService restores the class default. Null = not slowed.</summary>
+    public DateTime? MolotovSlowUntil { get; set; }
+
     public void ResetForRound()
     {
         TeleportsUsedThisRound = 0;
         PurchaseCounts.Clear();
         NapalmExpiresAt = null;
+        MolotovSlowUntil = null;
     }
 }

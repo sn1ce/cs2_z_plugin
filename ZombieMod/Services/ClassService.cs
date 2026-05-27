@@ -108,7 +108,8 @@ public sealed class ClassService
 
     /// <summary>
     /// Some maps / mp_freezetime_end events reset velocity. Re-apply velocity modifier 0.5s after
-    /// hurt so movement stays in line with the class spec.
+    /// hurt so movement stays in line with the class spec. Skipped while a molotov slow is
+    /// active — Tick() owns the velocity modifier in that case.
     /// </summary>
     public void OnPlayerHurt(CCSPlayerController client)
     {
@@ -119,11 +120,53 @@ public sealed class ClassService
             var fresh = Utilities.GetPlayerFromSlot(slot);
             if (fresh is null || !fresh.IsValid || !fresh.PawnIsAlive) return;
             var pawn = fresh.PlayerPawn.Value;
-            var cls = _infection.GetState(fresh)?.ActiveClass;
+            var state = _infection.GetState(fresh);
+            var cls = state?.ActiveClass;
             if (pawn is null || cls is null) return;
+            // Molotov slow active → leave the slowed modifier alone; Tick() restores when it expires.
+            if (state!.MolotovSlowUntil is DateTime until && DateTime.UtcNow < until) return;
             if (Math.Abs(cls.Speed - 250f) < 0.01f) return;
             pawn.VelocityModifier = cls.Speed / 250f;
         });
+    }
+
+    /// <summary>Refresh the molotov-burn timer for an infected and apply the slowed velocity
+    /// modifier immediately. Called from the plugin's player_hurt handler whenever the damage
+    /// weapon is "inferno" / "molotov" / "incgrenade". Survivors / non-infected are skipped
+    /// (the survivor team doesn't need slow handling — they just die from fire).</summary>
+    public void ApplyMolotovBurn(CCSPlayerController client)
+    {
+        if (!_config.GameSettings.EnableClassSpeed) return;
+        var multiplier = _config.GameSettings.MolotovSlowMultiplier;
+        if (multiplier >= 0.999f) return;  // slow disabled in config
+        if (!client.IsValid || !client.PawnIsAlive) return;
+        if (!_infection.IsClientInfected(client)) return;
+        var state = _infection.GetState(client);
+        var cls = state?.ActiveClass;
+        var pawn = client.PlayerPawn.Value;
+        if (state is null || cls is null || pawn is null) return;
+
+        state.MolotovSlowUntil = DateTime.UtcNow.AddSeconds(_config.GameSettings.MolotovSlowDurationSeconds);
+        pawn.VelocityModifier = (cls.Speed / 250f) * multiplier;
+    }
+
+    /// <summary>Called every server tick. Restores class velocity for any infected whose
+    /// molotov slow has just expired. Cheap: only walks the slow-state dict when needed.</summary>
+    public void Tick()
+    {
+        if (!_config.GameSettings.EnableClassSpeed) return;
+        foreach (var state in _infection.Players.Values)
+        {
+            if (state.MolotovSlowUntil is not DateTime until) continue;
+            if (DateTime.UtcNow < until) continue;  // still slowed
+            state.MolotovSlowUntil = null;
+            var fresh = Utilities.GetPlayerFromSlot(state.Slot);
+            if (fresh is null || !fresh.IsValid || !fresh.PawnIsAlive) continue;
+            var pawn = fresh.PlayerPawn.Value;
+            var cls = state.ActiveClass;
+            if (pawn is null || cls is null) continue;
+            pawn.VelocityModifier = cls.Speed / 250f;
+        }
     }
 
     private void StartRegenFor(int slot, ClassConfig cls)

@@ -45,6 +45,17 @@ public sealed record GameSettings
     /// spawn. They can still toggle it off via !fl or pressing E. Bots are skipped.</summary>
     public bool FlashlightDefaultOn { get; init; } = true;
 
+    /// <summary>Speed multiplier applied to infected standing in molotov / incgrenade fire.
+    /// 0.5 = half speed; 1.0 disables the slow. Combined multiplicatively with the class
+    /// speed (so a Runner at 1.1× still moves faster while burning than a default infected,
+    /// just throttled to 0.5× of their own normal speed).</summary>
+    public float MolotovSlowMultiplier { get; init; } = 0.5f;
+
+    /// <summary>How long after the most-recent fire damage tick the slow lingers, in seconds.
+    /// Fire damage ticks ~4/sec so 1.5s easily covers in-fire dwell; after escaping the
+    /// inferno the slow expires and class speed is restored on the next tick.</summary>
+    public float MolotovSlowDurationSeconds { get; init; } = 1.5f;
+
     /// <summary>Cash floor at the start of each round. Players with less get bumped up to this.
     /// Players with more keep what they earned.</summary>
     public int StartMoney { get; init; } = 4000;

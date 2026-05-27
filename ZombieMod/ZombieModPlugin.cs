@@ -183,7 +183,12 @@ public sealed class ZombieModPlugin : BasePlugin
 
         // Per-tick: re-position any active flashlights to follow their owners.
         // Cheap when nobody has a flashlight on (early-return on _wantOn.Count == 0).
-        RegisterListener<OnTick>(() => Flashlight.Tick());
+        // Classes.Tick handles molotov-slow expiry (restores class speed when no longer burning).
+        RegisterListener<OnTick>(() =>
+        {
+            Flashlight.Tick();
+            Classes.Tick();
+        });
 
         // sv_cheats has to stay on for sv_infinite_ammo (cheat-protected), but that means
         // any player can normally run noclip / god / ent_* and break the round. Block these
@@ -259,8 +264,18 @@ public sealed class ZombieModPlugin : BasePlugin
         if (victim is { IsValid: true } v)
         {
             Classes.OnPlayerHurt(v);
+            // Inferno/molotov fire damage refreshes the molotov-slow timer on infected.
+            // CS2 reports the burn-area weapon as "inferno"; the projectile itself can also
+            // appear as "molotov" / "incgrenade" on the first impact tick. Catch all three.
+            var w = @event.Weapon ?? string.Empty;
+            if (w.Contains("inferno", StringComparison.OrdinalIgnoreCase)
+                || w.Contains("molotov", StringComparison.OrdinalIgnoreCase)
+                || w.Contains("incgrenade", StringComparison.OrdinalIgnoreCase))
+            {
+                Classes.ApplyMolotovBurn(v);
+            }
             if (attacker is { IsValid: true } a)
-                Knockback.ApplyHurtKnockback(v, a, @event.Weapon, @event.DmgHealth, @event.Hitgroup);
+                Knockback.ApplyHurtKnockback(v, a, w, @event.DmgHealth, @event.Hitgroup);
         }
         return HookResult.Continue;
     }
