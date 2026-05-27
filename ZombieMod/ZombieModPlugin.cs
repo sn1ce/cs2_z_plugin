@@ -267,15 +267,26 @@ public sealed class ZombieModPlugin : BasePlugin
         if (client is null || !client.IsValid) return HookResult.Continue;
         if (client.Team is CsTeam.None or CsTeam.Spectator) return HookResult.Continue;
 
-        switch (Respawn.ResolvePostSpawnAction(client))
+        // Defer the team/class apply by ~0.2s so the pawn finishes its own spawn pipeline
+        // first. Without this, SetModel inside ApplyClass runs before CS2 has fully initialized
+        // the pawn and the swap doesn't stick — observed on respawned infected getting the
+        // default agent model instead of the zombie one.
+        var action = Respawn.ResolvePostSpawnAction(client);
+        var deferredClient = client;
+        AddTimer(0.2f, () =>
         {
-            case RespawnService.PostSpawnAction.Infect:
-                Infection.InfectClient(client, attacker: null, patientZero: false, force: true);
-                break;
-            case RespawnService.PostSpawnAction.Humanize:
-                Infection.HumanizeClient(client, respawn: false);
-                break;
-        }
+            if (!deferredClient.IsValid) return;
+            switch (action)
+            {
+                case RespawnService.PostSpawnAction.Infect:
+                    if (deferredClient.PawnIsAlive)
+                        Infection.InfectClient(deferredClient, attacker: null, patientZero: false, force: true);
+                    break;
+                case RespawnService.PostSpawnAction.Humanize:
+                    Infection.HumanizeClient(deferredClient, respawn: false);
+                    break;
+            }
+        });
 
         // Capture spawn position after CS2 finishes placing the pawn.
         var captured = client;

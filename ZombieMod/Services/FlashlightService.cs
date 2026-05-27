@@ -29,11 +29,15 @@ public sealed class FlashlightService
     private readonly Random _rng = new();
 
     /// <summary>Per-player flicker bookkeeping. We start a brief stutter every 6–14s on
-    /// a random schedule per player so multiple players' flickers don't sync up.</summary>
+    /// a random schedule per player so multiple players' flickers don't sync up. During a
+    /// stutter we destroy + recreate the entity on a ~70ms cadence — entity-gone = light-gone
+    /// in the scene, which is the only flicker mechanism that's confirmed visible.</summary>
     private sealed class FlickerState
     {
-        public DateTime NextStartAt;   // when the next flicker stutter is allowed to start
-        public DateTime EndAt;         // when the current flicker stutter ends
+        public DateTime NextStartAt;     // when the next flicker stutter is allowed to start
+        public DateTime EndAt;           // when the current flicker stutter ends
+        public DateTime NextToggleAt;    // when to next destroy/recreate the entity
+        public bool IsOff;               // true while the entity is destroyed mid-flicker
         public bool Active => DateTime.UtcNow < EndAt;
     }
 
@@ -103,6 +107,42 @@ public sealed class FlashlightService
             var pawn = client.PlayerPawn.Value;
             if (pawn?.AbsOrigin is null || pawn.V_angle is null) continue;
 
+            // Tick the flicker state machine FIRST. If the state is currently "off mid-stutter",
+            // destroy the entity (light gone from scene) and skip recreation this tick.
+            var st = _flicker.GetValueOrDefault(slot) ?? new FlickerState
+            {
+                NextStartAt = DateTime.UtcNow.AddSeconds(2 + _rng.NextDouble() * 8),
+                EndAt = DateTime.MinValue,
+            };
+            _flicker[slot] = st;
+
+            if (st.Active)
+            {
+                if (DateTime.UtcNow >= st.NextToggleAt)
+                {
+                    st.IsOff = !st.IsOff;
+                    st.NextToggleAt = DateTime.UtcNow.AddMilliseconds(50 + _rng.Next(40)); // 50-90ms beat
+                }
+            }
+            else
+            {
+                st.IsOff = false;
+                if (DateTime.UtcNow >= st.NextStartAt)
+                {
+                    st.EndAt = DateTime.UtcNow.AddMilliseconds(350 + _rng.Next(200));    // 350-550ms stutter
+                    st.NextStartAt = st.EndAt.AddSeconds(6 + _rng.NextDouble() * 8);     // 6-14s between
+                    st.NextToggleAt = DateTime.UtcNow;  // start toggling immediately
+                }
+            }
+
+            if (st.IsOff)
+            {
+                // Destroy + leave gone for this tick. Next tick the cycle may flip back to On,
+                // at which point the get-or-create below recreates the entity.
+                Destroy(slot);
+                continue;
+            }
+
             COmniLight? entity;
             if (_entities.TryGetValue(slot, out var existing) && existing.IsValid)
             {
@@ -122,10 +162,11 @@ public sealed class FlashlightService
             // DirectLight=3 is the magic — without it the entity exists but emits nothing.
             entity.DirectLight = 3;
 
-            // Position the light FORWARD of the view-model so the player's own weapon doesn't
-            // get washed out by the cone. Compute forward unit vector from V_angle, push the
-            // origin ~60u along it. Head height = AbsOrigin.Z + 64.03 (matches reference plugin).
-            const float forwardOffset = 60f;
+            // Position the light slightly forward of the eye so the view-model weapon doesn't
+            // get washed out, but close enough that pressing against a wall doesn't spawn the
+            // light origin inside the geometry (which would kill all visible illumination).
+            // 25u sits right at the gun muzzle.
+            const float forwardOffset = 25f;
             var pitchRad = pawn.V_angle.X * MathF.PI / 180f;
             var yawRad   = pawn.V_angle.Y * MathF.PI / 180f;
             var cp = MathF.Cos(pitchRad);
@@ -144,35 +185,9 @@ public sealed class FlashlightService
             entity.OuterAngle = 45f;
             entity.Color = Color.White;
             entity.ColorTemperature = 6500;
+            entity.Brightness = 1f;
             entity.Range = 5000f;
-            entity.Enabled = true;     // always enabled; flicker rides Brightness instead
-
-            // Horror-flick: every 6–14s, a ~400ms stutter where Brightness drops to 0 in
-            // strobing bursts. Brightness drives the actual light intensity, so setting it
-            // to 0 instantly removes the light from the scene — way more reliable than
-            // toggling Enabled (which may or may not flush frame-to-frame on COmniLight).
-            var st = _flicker.GetValueOrDefault(slot) ?? new FlickerState
-            {
-                NextStartAt = DateTime.UtcNow.AddSeconds(2 + _rng.NextDouble() * 8),
-                EndAt = DateTime.MinValue,
-            };
-            _flicker[slot] = st;
-
-            if (st.Active)
-            {
-                var phase = (DateTime.UtcNow - st.EndAt.AddMilliseconds(-400)).TotalSeconds;
-                // ~10 Hz strobe. Brightness 1 most of the time, 0 in brief dips.
-                entity.Brightness = Math.Sin(phase * 60.0) > -0.3 ? 1f : 0f;
-            }
-            else
-            {
-                entity.Brightness = 1f;
-                if (DateTime.UtcNow >= st.NextStartAt)
-                {
-                    st.EndAt = DateTime.UtcNow.AddMilliseconds(300 + _rng.Next(200));   // 300-500ms stutter
-                    st.NextStartAt = st.EndAt.AddSeconds(6 + _rng.NextDouble() * 8);    // 6-14s gap
-                }
-            }
+            entity.Enabled = true;
 
             // DispatchSpawn every tick — that's what the working reference does. On an already-
             // spawned entity it's effectively a no-op + property re-apply.
