@@ -12,6 +12,9 @@ services:
       # .env mounted into the container so add/edit can append new
       # RCON_PASSWORD_<ID> keys without a rebuild.
       ENV_FILE: /config/.env
+      # Persisted history of workshop map IDs the user has switched to,
+      # alongside the human-readable map title fetched from Steam.
+      WORKSHOP_HISTORY_FILE: /config/workshop_history.json
     volumes:
       # Read-only docker socket so we can stream cs2-server logs.
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -21,6 +24,9 @@ services:
       # .env file — read-write so newly-added servers can have their password
       # persisted alongside the existing keys.
       - ./.env:/config/.env:rw
+      # Workshop map history — read-write so the WS handler can append IDs
+      # the user has changed to (with names resolved via Steam Web API).
+      - ./workshop_history.json:/config/workshop_history.json:rw
     networks:
       - gameserver_default
 

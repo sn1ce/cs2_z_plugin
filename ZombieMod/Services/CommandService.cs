@@ -19,6 +19,7 @@ public sealed class CommandService
     private readonly WeaponService _weapons;
     private readonly PropService _props;
     private readonly SoundService _sounds;
+    private readonly FlashlightService _flashlight;
 
     /// <summary>Host plugin reference — required by CS2MenuManager.WasdMenu ctor.</summary>
     internal BasePlugin? Host { get; set; }
@@ -32,7 +33,8 @@ public sealed class CommandService
         TeleportService teleport,
         WeaponService weapons,
         PropService props,
-        SoundService sounds)
+        SoundService sounds,
+        FlashlightService flashlight)
     {
         _logger = logger;
         _config = config;
@@ -43,6 +45,7 @@ public sealed class CommandService
         _weapons = weapons;
         _props = props;
         _sounds = sounds;
+        _flashlight = flashlight;
     }
 
     public void HandleProp(CCSPlayerController? caller, CommandInfo info) => OpenPropMenu(caller, null);
@@ -245,6 +248,18 @@ public sealed class CommandService
             client.PrintToChat(" \x04[ZombieMod]\x01 Warmup ended.");
         });
         menu.Display(caller, 0);
+    }
+
+    public void HandleFlashlight(CCSPlayerController? caller, CommandInfo info)
+    {
+        if (caller is null || !caller.IsValid) return;
+        if (!caller.PawnIsAlive)
+        {
+            info.ReplyToCommand(" [ZombieMod] Flashlight needs an alive pawn.");
+            return;
+        }
+        var on = _flashlight.Toggle(caller);
+        caller.PrintToChat($" \x04[ZombieMod]\x01 Flashlight \x07{(on ? "ON" : "OFF")}\x01.");
     }
 
     public void HandleZHelp(CCSPlayerController? caller, CommandInfo info)

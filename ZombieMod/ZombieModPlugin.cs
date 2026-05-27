@@ -33,6 +33,7 @@ public sealed class ZombieModPlugin : BasePlugin
     internal CommandService Commands { get; private set; } = null!;
     internal PropService Props { get; private set; } = null!;
     internal SoundService Sounds { get; private set; } = null!;
+    internal FlashlightService Flashlight { get; private set; } = null!;
     internal KnockbackProviderDetector KnockbackDetector { get; private set; } = null!;
     internal ZombieModApi Api { get; private set; } = null!;
 
@@ -54,7 +55,8 @@ public sealed class ZombieModPlugin : BasePlugin
         Teleport  = new TeleportService(Logger, Config, Infection) { Host = this };
         Props     = new PropService(Logger, Config);
         Sounds    = new SoundService(Logger, Config);
-        Commands  = new CommandService(Logger, Config, Infection, Respawn, Classes, Teleport, Weapons, Props, Sounds) { Host = this };
+        Flashlight = new FlashlightService(Logger) { Host = this };
+        Commands  = new CommandService(Logger, Config, Infection, Respawn, Classes, Teleport, Weapons, Props, Sounds, Flashlight) { Host = this };
 
         Api = new ZombieModApi(Infection, Classes);
 
@@ -160,6 +162,7 @@ public sealed class ZombieModPlugin : BasePlugin
         {
             Classes.OnPlayerDisconnect(slot);
             Infection.OnClientDisconnect(slot);
+            Flashlight.Cleanup(slot);
         });
 
         Logger.LogInformation(
@@ -174,6 +177,7 @@ public sealed class ZombieModPlugin : BasePlugin
     {
         Infection.OnRoundStart();
         Props.CleanupAll();
+        Flashlight.CleanupAll();
         return HookResult.Continue;
     }
 
@@ -222,6 +226,7 @@ public sealed class ZombieModPlugin : BasePlugin
         {
             Classes.OnPlayerDeath(victim);
             Respawn.ScheduleRespawn(victim);
+            Flashlight.Cleanup(victim.Slot);
             // Survivor death (bite) spatializes from the dying player's pawn so nearby
             // zombies hear the directional cue. Infected death uses the GFL path-based
             // sounds (no SoundEvent yet) — sourceEntity is moot for play <path> fallback.
@@ -329,6 +334,12 @@ public sealed class ZombieModPlugin : BasePlugin
     [CommandHelper(0, "", CommandUsage.CLIENT_ONLY)]
     public void Cmd_Prop(CCSPlayerController? caller, CommandInfo info)
         => Commands.HandleProp(caller, info);
+
+    [ConsoleCommand("css_flashlight", "Toggle your flashlight (light_dynamic attached to your pawn).")]
+    [ConsoleCommand("css_fl", "Toggle your flashlight.")]
+    [CommandHelper(0, "", CommandUsage.CLIENT_ONLY)]
+    public void Cmd_Flashlight(CCSPlayerController? caller, CommandInfo info)
+        => Commands.HandleFlashlight(caller, info);
 
     [ConsoleCommand("css_admin", "Open the ZombieMod admin panel (root admins only).")]
     [CommandHelper(0, "", CommandUsage.CLIENT_ONLY)]

@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .rcon import AsyncRcon, RconError
+from .workshop_history import WorkshopHistory, extract_workshop_id
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("webcon")
@@ -42,6 +43,7 @@ log = logging.getLogger("webcon")
 TOKEN = os.environ.get("WEBCON_TOKEN", "")
 SERVERS_CONFIG = os.environ.get("SERVERS_CONFIG", "/config/servers.json")
 ENV_FILE = os.environ.get("ENV_FILE", "/config/.env")
+WORKSHOP_HISTORY_FILE = os.environ.get("WORKSHOP_HISTORY_FILE", "/config/workshop_history.json")
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -206,6 +208,9 @@ ACTIVE_WS: dict[str, set[WebSocket]] = {}
 # Serializes all registry mutations (add/edit/delete) so two concurrent calls
 # can't race on servers.json or the .env append.
 REGISTRY_LOCK = asyncio.Lock()
+
+# Workshop map history (ID → name, last_used, …). One per process.
+WORKSHOP = WorkshopHistory(WORKSHOP_HISTORY_FILE)
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +388,40 @@ async def api_status(token: str = "") -> JSONResponse:
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Workshop map history — see app/workshop_history.py for storage details.
+# ---------------------------------------------------------------------------
+
+@app.get("/api/workshop-maps")
+async def api_workshop_maps(token: str = "") -> JSONResponse:
+    """Return the persisted workshop-ID → name list, most-recently-used first.
+    Used by the dashboard + per-server console to populate the recent-maps
+    dropdown next to the Workshop ID input. Placeholder names trigger an async
+    Steam Web API refetch as a side effect of calling this."""
+    _check_token(token)
+    items = await WORKSHOP.list_sorted()
+    return JSONResponse({"items": items})
+
+
+@app.post("/api/workshop-maps")
+async def api_workshop_maps_add(
+    token: str = "",
+    body: dict[str, Any] = Body(...),
+) -> JSONResponse:
+    """Manually add a workshop ID to the history (e.g. a 'pin to favorites'
+    button). The implicit add on `host_workshop_map <id>` covers the normal
+    case; this is here for explicit curation."""
+    _check_token(token)
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be a JSON object")
+    wid = body.get("id")
+    if not isinstance(wid, str) or not wid.strip().isdigit():
+        raise HTTPException(status_code=400, detail="id must be a numeric string")
+    await WORKSHOP.record_use(wid.strip())
+    items = await WORKSHOP.list_sorted()
+    return JSONResponse({"items": items}, status_code=201)
 
 
 # ---------------------------------------------------------------------------
@@ -670,6 +709,11 @@ async def ws_one_server(ws: WebSocket) -> None:
                 continue
             if not cmd:
                 continue
+            wid = extract_workshop_id(cmd)
+            if wid:
+                # Record + fire async Steam name fetch — never block the RCON
+                # call itself; the response below still goes out immediately.
+                asyncio.create_task(WORKSHOP.record_use(wid))
             await ws.send_json({"type": "prompt", "text": f"> {cmd}"})
             try:
                 response = await rcon.exec(cmd)
@@ -751,6 +795,9 @@ async def ws_broadcast(ws: WebSocket) -> None:
                 continue
             if not cmd:
                 continue
+            wid = extract_workshop_id(cmd)
+            if wid:
+                asyncio.create_task(WORKSHOP.record_use(wid))
             await ws.send_json({"type": "prompt", "text": f"> {cmd}"})
             await asyncio.gather(*(run_one(sid, rc, cmd) for sid, rc in rcons.items()))
     except WebSocketDisconnect:
