@@ -1,7 +1,8 @@
 {
-    // Cvars the plugin pins on every map start AND again at +5s / +15s so casual mode's
-    // gamemode_server.cfg can't clobber them. Order matters — sv_cheats must land before
-    // any cheat-protected cvar (sv_infinite_ammo, etc.).
+    // Cvars the plugin pins on Load + every OnMapStart + every 3s via a REPEAT timer.
+    // The repeating apply exists because gamemode_casual.cfg execs ~1s after map start
+    // and resets sv_infinite_ammo/mp_buy_anywhere to 0. Order matters — sv_cheats must
+    // land before any cheat-protected cvar (sv_infinite_ammo, etc.).
     //
     // Edit this file and run "css_zreload" in chat; the plugin re-applies on the next
     // tick. Map start (or "changelevel de_dust2" from webcon) gives you a fresh slate.
@@ -66,10 +67,5 @@
         // ── Misc ─────────────────────────────────────────────────────────────────
         // Quieter console; flip to 1 if you want CS2's developer-level prints.
         "developer 0"
-    ],
-
-    // Seconds after OnMapStart to re-apply the cvars above. Casual's gamemode cfg loads
-    // shortly after our hook fires and overwrites some of our values, so we re-clobber
-    // them on multiple delays to shrink the dead window. Empty list = no delayed re-apply.
-    "ReapplyDelaysSeconds": [ 1, 2, 5, 10, 15 ]
+    ]
 }

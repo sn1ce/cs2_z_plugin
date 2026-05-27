@@ -660,16 +660,18 @@ public sealed class InfectionService
         }
     }
 
-    /// <summary>Public entry point for the plugin's <c>EventItemPickup</c> handler.</summary>
+    /// <summary>Public entry point for the plugin's <c>EventItemPickup</c> handler. Drops every
+    /// non-knife weapon back onto the ground (where survivors can pick them up later) instead of
+    /// destroying them — infected just can't keep weapons, but the world keeps the loot.</summary>
     public void StripWeaponsKeepKnife(CCSPlayerController client) => StripWeapons(client, keepKnife: true);
 
     private static void StripWeapons(CCSPlayerController client, bool keepKnife)
     {
-        // Direct w.Remove() crashes CS2 with "WriteEnterPVS: GetEntServerClass failed" on the
-        // next net tick — the entity is freed but the player's inventory handle still references
-        // it. Working pattern: set as active, DropActiveWeapon (removes from inventory
-        // cleanly), then schedule a deferred "Kill" entity-IO event for safe destruction
-        // through the engine's normal teardown path.
+        // Pattern: set as active, DropActiveWeapon (CS2 ejects it in the player's facing
+        // direction, giving some natural separation so the infected doesn't immediately
+        // re-pick-up). We deliberately do NOT schedule a Kill event — the weapon should
+        // persist on the ground for survivors to collect later. Direct w.Remove() would
+        // crash CS2 with "WriteEnterPVS: GetEntServerClass failed" anyway.
         var slot = client.Slot;
         Server.NextFrame(() =>
         {
@@ -689,7 +691,6 @@ public sealed class InfectionService
                 {
                     pawn.WeaponServices.ActiveWeapon.Raw = handle.Raw;
                     fresh.DropActiveWeapon();
-                    w.AddEntityIOEvent("Kill", w, null, "", 0.5f);
                 }
                 catch
                 {

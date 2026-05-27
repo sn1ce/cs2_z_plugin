@@ -30,9 +30,12 @@ services:
       # ── Gameplay ────────────────────────────────────────────────────────
       CS2_MAXPLAYERS: "12"
       CS2_GAMEALIAS: "casual"        # casual | competitive | wingman | deathmatch
-      # Default to vanilla dust2 — fast load, working bot navmesh, no workshop fetch.
+      # Start on workshop map 3664560888 (zombie map). Setting CS2_HOST_WORKSHOP_MAP
+      # makes the image launch with +host_workshop_map <id>, which auto-fetches and loads
+      # the workshop content before the server is reachable. CS2_STARTMAP is kept as a
+      # fallback for runs where workshop fetch fails.
       CS2_STARTMAP: "de_dust2"
-      # CS2_HOST_WORKSHOP_MAP: ""   # uncomment + set a workshop ID to start on that map
+      CS2_HOST_WORKSHOP_MAP: "3664560888"
       CS2_MAPGROUP: "mg_active"
       CS2_BOT_QUOTA: "2"
       CS2_CHEATS: "1"

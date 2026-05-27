@@ -65,5 +65,5 @@
     // Map rotation. Numeric strings → Steam Workshop IDs (host_workshop_map),
     // otherwise treated as vanilla map names (changelevel).
     // Empty list = stay on the current map forever.
-    "MapRotation": [ "de_dust2", "3312510632" ]
+    "MapRotation": [ "3664560888", "de_dust2", "3312510632" ]
 }

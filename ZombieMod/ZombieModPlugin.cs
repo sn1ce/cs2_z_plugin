@@ -83,21 +83,17 @@ public sealed class ZombieModPlugin : BasePlugin
         Weapons.RegisterPurchaseCommands();
 
         // Required cvars: loaded from configs/cvars.json. Self-applying at Load + every map
-        // start keeps gameplay stable against casual mode's gamemode_server.cfg overrides.
+        // start keeps gameplay stable as a safety net. The authoritative pinning happens via
+        // gameserver/.../cfg/gamemode_casual_server.cfg — CS2 execs that file as the LAST
+        // step of casual-mode bootstrap, so it cleanly wins over gamemode_casual.cfg's
+        // sv_infinite_ammo=0 / mp_buy_anywhere=0 clobber. Keep the two in sync.
         ApplyRequiredCvars();
         EnsureWarmupEnded();
         RegisterListener<OnMapStart>(_ =>
         {
             ApplyRequiredCvars();
             EnsureWarmupEnded();
-            // sv_cheats + buy cvars get clobbered by casual's gamemode_server.cfg AFTER our
-            // OnMapStart applies them. Re-apply on each configured delay so our values stick.
-            foreach (var delay in Config.Cvars.ReapplyDelaysSeconds)
-                AddTimer(delay, () => ApplyRequiredCvars());
-
             // Precache happens via the OnServerPrecacheResources listener (manifest.AddResource).
-            // Earlier hidden-dummy hack didn't pin anything — verified via deep research against
-            // CS2-Parachute / CS2PropHunt / ResourcePrecacher: manifest is the only path.
         });
 
         RegisterListener<OnServerPrecacheResources>(manifest =>
