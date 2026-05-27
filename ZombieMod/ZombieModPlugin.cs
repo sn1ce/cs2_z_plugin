@@ -76,6 +76,7 @@ public sealed class ZombieModPlugin : BasePlugin
         Infection.ApplyClassHook         = (c, cls) => Classes.ApplyClass(c, cls);
 
         ScheduleInfectedIdleSounds();
+        ScheduleFlashlightHint();
 
         Capabilities.RegisterPluginCapability(Capability, () => Api);
 
@@ -424,6 +425,29 @@ public sealed class ZombieModPlugin : BasePlugin
             }
             catch { /* don't let one bad tick kill the loop */ }
             ScheduleInfectedIdleSounds();
+        });
+    }
+
+    /// <summary>
+    /// Every 30s, remind alive humans about the flashlight controls. Suppressed when no
+    /// humans are connected, so it doesn't spam an empty server.
+    /// </summary>
+    private void ScheduleFlashlightHint()
+    {
+        AddTimer(30.0f, () =>
+        {
+            try
+            {
+                var sent = 0;
+                foreach (var p in Utilities.GetPlayers())
+                {
+                    if (p is null || !p.IsValid || p.IsBot || p.IsHLTV) continue;
+                    p.PrintToChat(" \x04[ZombieMod]\x01 Press \x07E\x01 (or type \x07!fl\x01) to toggle your flashlight.");
+                    sent++;
+                }
+            }
+            catch { /* don't let one bad tick kill the loop */ }
+            ScheduleFlashlightHint();
         });
     }
 

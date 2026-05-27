@@ -26,7 +26,7 @@
         "Regen_Amount": 100,
         "Knockback": 5.0,
         "Speed": 300.0,
-        "Scale": 1.2,
+        "Scale": 1.0,
         "RenderR": 255, "RenderG": 255, "RenderB": 255
     },
     "patient_zero": {
@@ -41,7 +41,7 @@
         "Regen_Amount": 100,
         "Knockback": 5.0,
         "Speed": 300.0,
-        "Scale": 1.3,
+        "Scale": 1.05,
         "RenderR": 255, "RenderG": 255, "RenderB": 255
     },
 
@@ -76,7 +76,7 @@
         "Regen_Amount": 150,
         "Knockback": 2.0,
         "Speed": 250.0,
-        "Scale": 1.4,
+        "Scale": 1.1,
         "RenderR": 255, "RenderG": 255, "RenderB": 255
     },
     "acolyte": {
@@ -91,7 +91,7 @@
         "Regen_Amount": 100,
         "Knockback": 4.0,
         "Speed": 320.0,
-        "Scale": 1.1,
+        "Scale": 1.05,
         "RenderR": 255, "RenderG": 255, "RenderB": 255
     },
     "frostbite": {
@@ -106,7 +106,7 @@
         "Regen_Amount": 80,
         "Knockback": 3.0,
         "Speed": 280.0,
-        "Scale": 1.2,
+        "Scale": 1.05,
         "RenderR": 255, "RenderG": 255, "RenderB": 255
     }
 }

@@ -25,6 +25,17 @@ public sealed class FlashlightService
     private readonly Dictionary<int, COmniLight> _entities = new();   // slot → live entity
     private readonly HashSet<int> _wantOn = new();                    // slots currently wanting on
     private readonly Dictionary<int, bool> _lastUseHeld = new();       // slot → previous-tick Use state
+    private readonly Dictionary<int, FlickerState> _flicker = new();   // slot → flicker bookkeeping
+    private readonly Random _rng = new();
+
+    /// <summary>Per-player flicker bookkeeping. We start a brief stutter every 6–14s on
+    /// a random schedule per player so multiple players' flickers don't sync up.</summary>
+    private sealed class FlickerState
+    {
+        public DateTime NextStartAt;   // when the next flicker stutter is allowed to start
+        public DateTime EndAt;         // when the current flicker stutter ends
+        public bool Active => DateTime.UtcNow < EndAt;
+    }
 
     internal BasePlugin? Host { get; set; }
 
@@ -123,11 +134,35 @@ public sealed class FlashlightService
                 pawn.AbsVelocity);
 
             entity.OuterAngle = 45f;
-            entity.Enabled = true;
             entity.Color = Color.White;
             entity.ColorTemperature = 6500;
             entity.Brightness = 1f;
             entity.Range = 5000f;
+
+            // Horror-flick: every 6–14s start a ~400ms stutter; during it, drive Enabled via
+            // a sin wave at ~20 Hz so it reads as a "blip-blip-blip" flicker rather than a
+            // single off-period. Stable between stutters.
+            var st = _flicker.GetValueOrDefault(slot) ?? new FlickerState
+            {
+                NextStartAt = DateTime.UtcNow.AddSeconds(2 + _rng.NextDouble() * 8),
+                EndAt = DateTime.MinValue,
+            };
+            _flicker[slot] = st;
+
+            if (st.Active)
+            {
+                var phase = (DateTime.UtcNow - st.EndAt.AddMilliseconds(-400)).TotalSeconds;
+                entity.Enabled = Math.Sin(phase * 60.0) > -0.3;
+            }
+            else
+            {
+                entity.Enabled = true;
+                if (DateTime.UtcNow >= st.NextStartAt)
+                {
+                    st.EndAt = DateTime.UtcNow.AddMilliseconds(300 + _rng.Next(200));   // 300-500ms stutter
+                    st.NextStartAt = st.EndAt.AddSeconds(6 + _rng.NextDouble() * 8);    // 6-14s gap
+                }
+            }
 
             // DispatchSpawn every tick — that's what the working reference does. On an already-
             // spawned entity it's effectively a no-op + property re-apply.
@@ -141,6 +176,7 @@ public sealed class FlashlightService
     {
         _wantOn.Remove(slot);
         _lastUseHeld.Remove(slot);
+        _flicker.Remove(slot);
         Destroy(slot);
     }
 
@@ -150,6 +186,7 @@ public sealed class FlashlightService
             Destroy(slot);
         _wantOn.Clear();
         _lastUseHeld.Clear();
+        _flicker.Clear();
     }
 
     private void Destroy(int slot)
