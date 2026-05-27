@@ -847,10 +847,10 @@ body {
 .log {
   flex: 1;
   margin: 0;
-  padding: 16px 18px 22px;
+  padding: 10px 18px 14px;
   font-family: var(--font-mono);
   font-size: 12.5px;
-  line-height: 1.55;
+  line-height: 1.2;
   color: var(--fg-dim);
   background:
     linear-gradient(180deg, rgba(255,107,0,0.025) 0%, transparent 28%),
@@ -860,8 +860,7 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
   overflow: auto;
-  display: flex;
-  flex-direction: column;
+  display: block;
   position: relative;
 }
 .log::before {
@@ -892,9 +891,13 @@ body {
 
 .line {
   display: block;
-  animation: lineIn 240ms var(--ease-out) both;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  animation: lineIn 160ms var(--ease-out) both;
 }
-.line + .line { margin-top: 2px; }
+.line + .line { margin-top: 0; }
 
 .line.prompt {
   color: var(--orange-soft);

@@ -1,4 +1,12 @@
 {
+    // Per-client cvars the plugin pushes to every player on connect AND on css_zreload.
+    // This is the bus-level volume knob: snd_toolvolume affects the audio bus our
+    // EmitSound + "play <path>" emissions land on. Edit value, save, css_zreload →
+    // every connected player gets the new value instantly. No reconnect needed.
+    "ClientCvars": {
+        "snd_toolvolume": 0.1
+    },
+
     // Each event has either:
     //   - "SoundEvent": "<name>"   → engine EmitSound (volume baked into the addon's .vsndevts)
     //   - "Files": ["sounds/...vsnd", ...] → client "play <path>" fallback (full volume, 2D)

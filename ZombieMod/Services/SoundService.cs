@@ -102,6 +102,29 @@ public sealed class SoundService
         }
     }
 
+    /// <summary>Push the configured ClientCvars (sounds.json) to one client. Called on
+    /// OnClientPutInServer so a fresh-connect picks up our bus volume settings immediately.</summary>
+    public void ApplyClientCvarsTo(CCSPlayerController? client)
+    {
+        if (client is null || !client.IsValid || client.IsBot || client.IsHLTV) return;
+        foreach (var (cvar, value) in Sounds.ClientCvars)
+        {
+            try
+            {
+                client.ExecuteClientCommand($"{cvar} {value.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+            }
+            catch { /* client gone mid-call */ }
+        }
+    }
+
+    /// <summary>Push the configured ClientCvars to every connected human. Called after
+    /// css_zreload so tuning the values in sounds.json takes effect live.</summary>
+    public void ApplyClientCvarsToAll()
+    {
+        foreach (var p in Utilities.GetPlayers())
+            ApplyClientCvarsTo(p);
+    }
+
     /// <summary>Cut every currently-playing sound on every client. Used on round end so
     /// background music doesn't bleed into post-round / freezetime.</summary>
     public void StopAllForEveryone()
@@ -122,11 +145,17 @@ public sealed class SoundService
     }
 }
 
-/// <summary>Sounds config root. <see cref="Events"/> maps event key → (Volume, Files[], SoundEvent).</summary>
+/// <summary>Sounds config root. <see cref="Events"/> maps event key → (Volume, Files[], SoundEvent).
+/// <see cref="ClientCvars"/> is a per-player cvar bag the plugin executes on every client when
+/// they connect AND after every css_zreload — useful for bus-level volume knobs like
+/// snd_toolvolume that affect the bus our EmitSound + play emissions land on.</summary>
 public sealed class SoundConfig
 {
     public IReadOnlyDictionary<string, SoundEntry> Events { get; init; }
         = new Dictionary<string, SoundEntry>();
+
+    public IReadOnlyDictionary<string, float> ClientCvars { get; init; }
+        = new Dictionary<string, float>();
 }
 
 public sealed class SoundEntry

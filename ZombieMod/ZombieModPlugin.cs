@@ -54,7 +54,7 @@ public sealed class ZombieModPlugin : BasePlugin
         Teleport  = new TeleportService(Logger, Config, Infection) { Host = this };
         Props     = new PropService(Logger, Config);
         Sounds    = new SoundService(Logger, Config);
-        Commands  = new CommandService(Logger, Config, Infection, Respawn, Classes, Teleport, Weapons, Props) { Host = this };
+        Commands  = new CommandService(Logger, Config, Infection, Respawn, Classes, Teleport, Weapons, Props, Sounds) { Host = this };
 
         Api = new ZombieModApi(Infection, Classes);
 
@@ -150,7 +150,11 @@ public sealed class ZombieModPlugin : BasePlugin
         RegisterListener<OnClientPutInServer>(slot =>
         {
             var c = Utilities.GetPlayerFromSlot(slot);
-            if (c is not null) Infection.OnClientPutInServer(c);
+            if (c is not null)
+            {
+                Infection.OnClientPutInServer(c);
+                Sounds.ApplyClientCvarsTo(c);
+            }
         });
         RegisterListener<OnClientDisconnect>(slot =>
         {

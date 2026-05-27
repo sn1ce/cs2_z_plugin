@@ -18,6 +18,7 @@ public sealed class CommandService
     private readonly TeleportService _teleport;
     private readonly WeaponService _weapons;
     private readonly PropService _props;
+    private readonly SoundService _sounds;
 
     /// <summary>Host plugin reference — required by CS2MenuManager.WasdMenu ctor.</summary>
     internal BasePlugin? Host { get; set; }
@@ -30,7 +31,8 @@ public sealed class CommandService
         ClassService classes,
         TeleportService teleport,
         WeaponService weapons,
-        PropService props)
+        PropService props,
+        SoundService sounds)
     {
         _logger = logger;
         _config = config;
@@ -40,6 +42,7 @@ public sealed class CommandService
         _teleport = teleport;
         _weapons = weapons;
         _props = props;
+        _sounds = sounds;
     }
 
     public void HandleProp(CCSPlayerController? caller, CommandInfo info) => OpenPropMenu(caller, null);
@@ -143,6 +146,9 @@ public sealed class CommandService
     public void HandleReload(CCSPlayerController? caller, CommandInfo info)
     {
         var ok = _config.Reload();
+        // Re-push ClientCvars (e.g. snd_toolvolume) so a value change in sounds.json
+        // takes effect immediately for every connected player — no reconnect needed.
+        _sounds.ApplyClientCvarsToAll();
         info.ReplyToCommand(ok
             ? " [ZombieMod] Configs reloaded successfully."
             : " [ZombieMod] Config reload completed with validation warnings — see console.");
