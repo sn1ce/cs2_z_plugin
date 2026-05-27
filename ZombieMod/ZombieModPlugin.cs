@@ -4,6 +4,7 @@ using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Admin;
 using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Memory;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using ZombieMod.Api;
@@ -217,6 +218,28 @@ public sealed class ZombieModPlugin : BasePlugin
             Server.ExecuteCommand("game_mode 0");
             return HookResult.Continue;
         });
+
+        // Block weapon pickup for infected at the engine level. The previous reactive
+        // approach (OnItemPickup → drop) caused a pickup-drop loop: the zombie picked
+        // up → we dropped at their feet → they walked over it next tick → loop. During
+        // the loop the pickup animation kept restarting and zombies couldn't knife.
+        // CanAcquire fires BEFORE the engine adds the weapon to inventory; returning
+        // anything non-Allowed cleanly rejects the pickup with no animation, no inventory
+        // touch, and the weapon stays on the ground for survivors. Buy path (method=Buy)
+        // is untouched so survivors keep purchasing normally.
+        VirtualFunctions.CCSPlayer_ItemServices_CanAcquireFunc.Hook(hook =>
+        {
+            if (hook.GetParam<AcquireMethod>(2) != AcquireMethod.PickUp) return HookResult.Continue;
+            var services = hook.GetParam<CCSPlayer_ItemServices>(0);
+            var pawn = services?.Pawn?.Value;
+            var controllerHandle = pawn?.Controller;
+            if (controllerHandle is null || controllerHandle.Value is null) return HookResult.Continue;
+            var controller = new CCSPlayerController(controllerHandle.Value.Handle);
+            if (!controller.IsValid) return HookResult.Continue;
+            if (!Infection.IsClientInfected(controller)) return HookResult.Continue;
+            hook.SetReturn(AcquireResult.NotAllowedByMode);
+            return HookResult.Stop;
+        }, HookMode.Pre);
 
         Logger.LogInformation(
             "ZombieMod {Version} loaded (hotReload={HotReload}, configDir={Dir})",
