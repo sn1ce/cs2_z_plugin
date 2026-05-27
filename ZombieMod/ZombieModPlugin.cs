@@ -219,16 +219,11 @@ public sealed class ZombieModPlugin : BasePlugin
             return HookResult.Continue;
         });
 
-        // mp_restartgame intercept: EventRoundStart is unreliable in this plugin context
-        // (verified earlier — round_start handlers silently fail to fire), so the OnRoundStart
-        // reset that normally clears IsInfected + force-switches everyone to CT never runs
-        // after a restart. Without this listener, a zombie running mp_restartgame respawned
-        // as a zombie because their PlayerState still had IsInfected=true and
-        // InfectionStarted was still true → ResolvePostSpawnAction returned Infect.
-        // Calling Infection.OnRoundStart() here resets state synchronously BEFORE the
-        // engine respawns players, so they spawn as survivors on CT.
-        AddCommandListener("mp_restartgame", (_, _) =>
+        // mp_restartgame intercept (defense layer 1 — command listener). May not fire
+        // for engine-issued commands; logged so we can confirm.
+        AddCommandListener("mp_restartgame", (_, info) =>
         {
+            Logger.LogInformation("[Restart] mp_restartgame command listener fired: {Args}", info.ArgString);
             Infection.OnRoundStart();
             return HookResult.Continue;
         });
@@ -265,11 +260,32 @@ public sealed class ZombieModPlugin : BasePlugin
     [GameEventHandler]
     public HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
     {
+        Logger.LogInformation("[Restart] EventRoundStart fired");
         Infection.OnRoundStart();
         Props.CleanupAll();
         Flashlight.CleanupAll();
         return HookResult.Continue;
     }
+
+    // Defense-in-depth: any of these events firing on mp_restartgame triggers the same
+    // idempotent state reset (clears IsInfected for all players + force-switches to CT).
+    // We don't know up-front which one CS2/CSSharp actually delivers in this build, so we
+    // listen on all of them and log so the next time the user reports a regression we can
+    // see in the log which path ran.
+    [GameEventHandler] public HookResult OnCsPreRestart(EventCsPreRestart @event, GameEventInfo info)
+        { Logger.LogInformation("[Restart] EventCsPreRestart"); Infection.OnRoundStart(); return HookResult.Continue; }
+
+    [GameEventHandler] public HookResult OnRoundPreStart(EventRoundPrestart @event, GameEventInfo info)
+        { Logger.LogInformation("[Restart] EventRoundPrestart"); Infection.OnRoundStart(); return HookResult.Continue; }
+
+    [GameEventHandler] public HookResult OnBeginNewMatch(EventBeginNewMatch @event, GameEventInfo info)
+        { Logger.LogInformation("[Restart] EventBeginNewMatch"); Infection.OnRoundStart(); return HookResult.Continue; }
+
+    [GameEventHandler] public HookResult OnCsMatchEndRestart(EventCsMatchEndRestart @event, GameEventInfo info)
+        { Logger.LogInformation("[Restart] EventCsMatchEndRestart"); Infection.OnRoundStart(); return HookResult.Continue; }
+
+    [GameEventHandler] public HookResult OnAnnounceMatchStart(EventRoundAnnounceMatchStart @event, GameEventInfo info)
+        { Logger.LogInformation("[Restart] EventRoundAnnounceMatchStart"); Infection.OnRoundStart(); return HookResult.Continue; }
 
     [GameEventHandler]
     public HookResult OnRoundFreezeEnd(EventRoundFreezeEnd @event, GameEventInfo info)
