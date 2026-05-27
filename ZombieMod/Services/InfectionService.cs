@@ -231,6 +231,11 @@ public sealed class InfectionService
         // Give the round-end screen ~8s to play before yanking everyone to the next map.
         Host?.AddTimer(8.0f, () =>
         {
+            // Pin casual BEFORE the swap — CS2 uses the destination map's metadata gamemode
+            // at changelevel time, which lands non-workshop maps (like de_dust2) in
+            // competitive mode and skips our gamemode_casual_server.cfg override.
+            Server.ExecuteCommand("game_type 0");
+            Server.ExecuteCommand("game_mode 0");
             if (long.TryParse(next, out _))
             {
                 _logger.LogInformation("[Map] Rotating to workshop map {Id}", next);

@@ -201,6 +201,18 @@ public sealed class ZombieModPlugin : BasePlugin
             });
         }
 
+        // changelevel intercept: CS2 picks the destination map's metadata-declared gamemode
+        // at swap time, so 'changelevel de_dust2' from RCON drops the server into competitive
+        // (de_dust2 defaults to competitive in gamemodes_server.txt). Pinning game_type/
+        // game_mode just BEFORE the changelevel forces CS2 to exec gamemode_casual.cfg →
+        // gamemode_casual_server.cfg on the new map, keeping us in casual.
+        AddCommandListener("changelevel", (_, _) =>
+        {
+            Server.ExecuteCommand("game_type 0");
+            Server.ExecuteCommand("game_mode 0");
+            return HookResult.Continue;
+        });
+
         Logger.LogInformation(
             "ZombieMod {Version} loaded (hotReload={HotReload}, configDir={Dir})",
             ModuleVersion, hotReload, configDir);
@@ -250,6 +262,19 @@ public sealed class ZombieModPlugin : BasePlugin
             if (attacker is { IsValid: true } a)
                 Knockback.ApplyHurtKnockback(v, a, @event.Weapon, @event.DmgHealth, @event.Hitgroup);
         }
+        return HookResult.Continue;
+    }
+
+    [GameEventHandler]
+    public HookResult OnHegrenadeDetonate(EventHegrenadeDetonate @event, GameEventInfo info)
+    {
+        // Record the detonation origin so the matching EventPlayerHurt(weapon=hegrenade) tick
+        // can apply directional knockback away from this point. Without this hook, HE damage
+        // events had no grenade reference and knockback silently skipped.
+        var attacker = @event.Userid;
+        if (attacker is null || !attacker.IsValid) return HookResult.Continue;
+        Knockback.RememberHeDetonate(attacker.Slot,
+            new CounterStrikeSharp.API.Modules.Utils.Vector(@event.X, @event.Y, @event.Z));
         return HookResult.Continue;
     }
 
