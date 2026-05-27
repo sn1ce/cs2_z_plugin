@@ -130,7 +130,7 @@ public sealed class FlashlightService
                 if (DateTime.UtcNow >= st.NextStartAt)
                 {
                     st.EndAt = DateTime.UtcNow.AddMilliseconds(350 + _rng.Next(200));    // 350-550ms stutter
-                    st.NextStartAt = st.EndAt.AddSeconds(6 + _rng.NextDouble() * 8);     // 6-14s between
+                    st.NextStartAt = st.EndAt.AddSeconds(3 + _rng.NextDouble() * 6);     // 3-9s between
                     st.NextToggleAt = DateTime.UtcNow;  // start toggling immediately
                 }
             }
