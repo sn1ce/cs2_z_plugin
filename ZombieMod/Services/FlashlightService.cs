@@ -1,6 +1,7 @@
 using System.Drawing;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using Vector = CounterStrikeSharp.API.Modules.Utils.Vector;
 
@@ -23,6 +24,7 @@ public sealed class FlashlightService
     private readonly ILogger _logger;
     private readonly Dictionary<int, COmniLight> _entities = new();   // slot → live entity
     private readonly HashSet<int> _wantOn = new();                    // slots currently wanting on
+    private readonly Dictionary<int, bool> _lastUseHeld = new();       // slot → previous-tick Use state
 
     internal BasePlugin? Host { get; set; }
 
@@ -53,6 +55,21 @@ public sealed class FlashlightService
     /// </summary>
     public void Tick()
     {
+        // +use edge detection — toggle once per E-press, no strobe while held.
+        // Runs every tick across all live human players, even ones without an active light.
+        // We intentionally do NOT rebind the E key: the engine still does its normal +use
+        // (pick up weapon, etc.); we just read the button state. The conflict is acceptable —
+        // matches the reference plugin's behavior and the user explicitly asked for it.
+        foreach (var p in Utilities.GetPlayers())
+        {
+            if (p is null || !p.IsValid || p.IsBot || p.IsHLTV || !p.PawnIsAlive) continue;
+            var currentlyHeld = (p.Buttons & PlayerButtons.Use) != 0;
+            var wasHeld = _lastUseHeld.GetValueOrDefault(p.Slot, false);
+            _lastUseHeld[p.Slot] = currentlyHeld;
+            if (currentlyHeld && !wasHeld) // rising edge
+                Toggle(p);
+        }
+
         if (_wantOn.Count == 0) return;
 
         foreach (var slot in _wantOn.ToList())
@@ -112,6 +129,7 @@ public sealed class FlashlightService
     public void Cleanup(int slot)
     {
         _wantOn.Remove(slot);
+        _lastUseHeld.Remove(slot);
         Destroy(slot);
     }
 
@@ -120,6 +138,7 @@ public sealed class FlashlightService
         foreach (var slot in _wantOn.ToList())
             Destroy(slot);
         _wantOn.Clear();
+        _lastUseHeld.Clear();
     }
 
     private void Destroy(int slot)
