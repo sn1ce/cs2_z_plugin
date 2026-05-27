@@ -144,12 +144,13 @@ public sealed class FlashlightService
             entity.OuterAngle = 45f;
             entity.Color = Color.White;
             entity.ColorTemperature = 6500;
-            entity.Brightness = 1f;
             entity.Range = 5000f;
+            entity.Enabled = true;     // always enabled; flicker rides Brightness instead
 
-            // Horror-flick: every 6–14s start a ~400ms stutter; during it, drive Enabled via
-            // a sin wave at ~20 Hz so it reads as a "blip-blip-blip" flicker rather than a
-            // single off-period. Stable between stutters.
+            // Horror-flick: every 6–14s, a ~400ms stutter where Brightness drops to 0 in
+            // strobing bursts. Brightness drives the actual light intensity, so setting it
+            // to 0 instantly removes the light from the scene — way more reliable than
+            // toggling Enabled (which may or may not flush frame-to-frame on COmniLight).
             var st = _flicker.GetValueOrDefault(slot) ?? new FlickerState
             {
                 NextStartAt = DateTime.UtcNow.AddSeconds(2 + _rng.NextDouble() * 8),
@@ -160,11 +161,12 @@ public sealed class FlashlightService
             if (st.Active)
             {
                 var phase = (DateTime.UtcNow - st.EndAt.AddMilliseconds(-400)).TotalSeconds;
-                entity.Enabled = Math.Sin(phase * 60.0) > -0.3;
+                // ~10 Hz strobe. Brightness 1 most of the time, 0 in brief dips.
+                entity.Brightness = Math.Sin(phase * 60.0) > -0.3 ? 1f : 0f;
             }
             else
             {
-                entity.Enabled = true;
+                entity.Brightness = 1f;
                 if (DateTime.UtcNow >= st.NextStartAt)
                 {
                     st.EndAt = DateTime.UtcNow.AddMilliseconds(300 + _rng.Next(200));   // 300-500ms stutter
