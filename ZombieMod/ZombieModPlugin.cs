@@ -189,6 +189,22 @@ public sealed class ZombieModPlugin : BasePlugin
         // Cheap when nobody has a flashlight on (early-return on _wantOn.Count == 0).
         RegisterListener<OnTick>(() => Flashlight.Tick());
 
+        // sv_cheats has to stay on for sv_infinite_ammo (cheat-protected), but that means
+        // any player can normally run noclip / god / ent_* and break the round. Block these
+        // commands from non-admins. Admins (@css/root) keep dev access.
+        foreach (var cmd in new[] { "noclip", "god", "ent_create", "ent_remove", "ent_fire",
+                                    "ent_setpos", "ent_teleport", "impulse" })
+        {
+            AddCommandListener(cmd, (client, info) =>
+            {
+                if (client is null || !client.IsValid) return HookResult.Continue;
+                if (CounterStrikeSharp.API.Modules.Admin.AdminManager.PlayerHasPermissions(client, "@css/root"))
+                    return HookResult.Continue;
+                client.PrintToChat($" \x04[ZombieMod]\x01 \x07{cmd}\x01 is admin-only on this server.");
+                return HookResult.Stop;
+            });
+        }
+
         Logger.LogInformation(
             "ZombieMod {Version} loaded (hotReload={HotReload}, configDir={Dir})",
             ModuleVersion, hotReload, configDir);
@@ -475,6 +491,12 @@ public sealed class ZombieModPlugin : BasePlugin
 
     private void ApplyRequiredCvars()
     {
+        // Single-pass apply. Server.NextFrame turned out to silently drop its callback at
+        // plugin-load and timer contexts, so the previous "split sv_cheats then nextframe
+        // the rest" approach left everything except sv_cheats unset. Manual RCON proved a
+        // same-frame `sv_cheats 1; sv_infinite_ammo 2; mp_buy_anywhere 1` sequence works,
+        // so the queuing-race theory was wrong.
+        Logger.LogInformation("[Cvars] Apply ({N})", Config.Cvars.RequiredCvars.Count);
         foreach (var cmd in Config.Cvars.RequiredCvars)
             Server.ExecuteCommand(cmd);
     }
