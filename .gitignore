@@ -15,3 +15,4 @@ gameserver/.env
 webcon/.env
 # Webcon Docker writes here at runtime
 webcon/servers.json
+webcon/workshop_history.json

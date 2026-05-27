@@ -127,7 +127,7 @@
     }
   }
 
-  function wireWorkshopHistory(selectEl, inputEl) {
+  function wireWorkshopHistory(selectEl, inputEl, btnEl) {
     if (!selectEl || !inputEl) return;
     selectEl.addEventListener("change", () => {
       const v = selectEl.value;
@@ -135,10 +135,16 @@
       inputEl.value = v;
       // Trigger the existing input validator (enables the Change Map button).
       inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-      inputEl.focus();
       // Reset the select back to the placeholder so picking the same row again
-      // still fires a change event next time.
+      // still fires a change event next time, and so it doesn't look "stuck".
       selectEl.selectedIndex = 0;
+      // Auto-fire the changemap: route through the button click so the same
+      // code path runs (validation, sendFn dispatch, input clear, history
+      // refresh). Manual button clicks still work; dropdown just skips the
+      // second click. Per-server vs broadcast distinction is preserved because
+      // the button passed here is the same one wireWorkshop wired to sendCmd
+      // or sendBroadcast respectively.
+      if (btnEl && !btnEl.disabled) btnEl.click();
     });
   }
 
@@ -275,8 +281,9 @@
     $("#clear").addEventListener("click", () => { logEl.innerHTML = ""; });
     const wsHistorySelect = $("#ws-workshop-history");
     const wsHistoryInput = $("#ws-workshop");
-    wireWorkshopHistory(wsHistorySelect, wsHistoryInput);
-    wireWorkshop(wsHistoryInput, $("#ws-workshop-btn"), sendCmd, {
+    const wsHistoryBtn = $("#ws-workshop-btn");
+    wireWorkshopHistory(wsHistorySelect, wsHistoryInput, wsHistoryBtn);
+    wireWorkshop(wsHistoryInput, wsHistoryBtn, sendCmd, {
       onChanged: () => loadWorkshopHistory(wsHistorySelect, wsHistoryInput),
     });
     loadWorkshopHistory(wsHistorySelect, wsHistoryInput);
@@ -584,8 +591,9 @@
     });
     const bcHistorySelect = $("#bc-workshop-history");
     const bcHistoryInput = $("#bc-workshop");
-    wireWorkshopHistory(bcHistorySelect, bcHistoryInput);
-    wireWorkshop(bcHistoryInput, $("#bc-workshop-btn"), sendBroadcast, {
+    const bcHistoryBtn = $("#bc-workshop-btn");
+    wireWorkshopHistory(bcHistorySelect, bcHistoryInput, bcHistoryBtn);
+    wireWorkshop(bcHistoryInput, bcHistoryBtn, sendBroadcast, {
       onChanged: () => loadWorkshopHistory(bcHistorySelect, bcHistoryInput),
     });
     loadWorkshopHistory(bcHistorySelect, bcHistoryInput);
