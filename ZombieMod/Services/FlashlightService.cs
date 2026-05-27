@@ -103,11 +103,22 @@ public sealed class FlashlightService
             // DirectLight=3 is the magic — without it the entity exists but emits nothing.
             entity.DirectLight = 3;
 
-            // Roughly head-height offset; reference plugin uses 64.03 standing / 46.03 crouched.
-            // We always use the standing offset for simplicity (light sits slightly above the
-            // head when crouched but still illuminates the area).
+            // Position the light FORWARD of the view-model so the player's own weapon doesn't
+            // get washed out by the cone. Compute forward unit vector from V_angle, push the
+            // origin ~60u along it. Head height = AbsOrigin.Z + 64.03 (matches reference plugin).
+            const float forwardOffset = 60f;
+            var pitchRad = pawn.V_angle.X * MathF.PI / 180f;
+            var yawRad   = pawn.V_angle.Y * MathF.PI / 180f;
+            var cp = MathF.Cos(pitchRad);
+            var fx = cp * MathF.Cos(yawRad);
+            var fy = cp * MathF.Sin(yawRad);
+            var fz = -MathF.Sin(pitchRad);
+
             entity.Teleport(
-                new Vector(pawn.AbsOrigin.X, pawn.AbsOrigin.Y, pawn.AbsOrigin.Z + 64.03f),
+                new Vector(
+                    pawn.AbsOrigin.X + fx * forwardOffset,
+                    pawn.AbsOrigin.Y + fy * forwardOffset,
+                    pawn.AbsOrigin.Z + 64.03f + fz * forwardOffset),
                 pawn.V_angle,
                 pawn.AbsVelocity);
 
