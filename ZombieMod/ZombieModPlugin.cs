@@ -184,6 +184,10 @@ public sealed class ZombieModPlugin : BasePlugin
             Flashlight.Cleanup(slot);
         });
 
+        // Per-tick: re-position any active flashlights to follow their owners.
+        // Cheap when nobody has a flashlight on (early-return on _wantOn.Count == 0).
+        RegisterListener<OnTick>(() => Flashlight.Tick());
+
         Logger.LogInformation(
             "ZombieMod {Version} loaded (hotReload={HotReload}, configDir={Dir})",
             ModuleVersion, hotReload, configDir);

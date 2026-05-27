@@ -1,23 +1,28 @@
+using System.Drawing;
 using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
+using Vector = CounterStrikeSharp.API.Modules.Utils.Vector;
 
 namespace ZombieMod.Services;
 
 /// <summary>
-/// Per-player "flashlight" implemented as a <c>light_dynamic</c> entity parented to the
-/// player's pawn. Not a true projected-texture cone with shadows — more like carrying a
-/// lantern — but functional in dark workshop maps. Each player can toggle their own light
-/// independently via the <c>!flashlight</c> chat command.
+/// Per-player flashlight using <c>light_omni2</c> (typed as <c>COmniLight</c>).
 ///
-/// Lifetime: light entities are destroyed on death, disconnect, and round start, so we
-/// never leak entities between rounds.
+/// Implementation cribbed from creazy231/cs2-css-flashlight (the working community plugin).
+/// Critical details that "obvious" attempts miss:
+///   - <c>DirectLight = 3</c> on the COmniLight — without this the entity emits nothing
+///   - Set all properties (Color, Brightness, Range, OuterAngle, ColorTemperature, Enabled)
+///     BEFORE <c>DispatchSpawn</c> so they take effect on init
+///   - Use <c>pawn.V_angle</c> not <c>EyeAngles</c> for proper view direction
+///   - Do NOT parent the light; re-Teleport it every tick to follow the player. Parenting
+///     loses tracking of pitch/yaw and produces weird offset behavior.
 /// </summary>
 public sealed class FlashlightService
 {
     private readonly ILogger _logger;
-    private readonly Dictionary<int, uint> _activeLights = new();   // slot → entity index
+    private readonly Dictionary<int, COmniLight> _entities = new();   // slot → live entity
+    private readonly HashSet<int> _wantOn = new();                    // slots currently wanting on
 
     internal BasePlugin? Host { get; set; }
 
@@ -26,82 +31,103 @@ public sealed class FlashlightService
         _logger = logger;
     }
 
-    /// <summary>Toggle the calling player's flashlight. Returns true if it's now ON, false if OFF
-    /// (or if the toggle was rejected — pawn dead, etc).</summary>
+    /// <summary>Toggle the flashlight. Returns true if it's now ON, false if OFF.</summary>
     public bool Toggle(CCSPlayerController client)
     {
         if (!client.IsValid || !client.PawnIsAlive) return false;
-
-        if (_activeLights.TryGetValue(client.Slot, out var existingIdx))
+        var slot = client.Slot;
+        if (_wantOn.Contains(slot))
         {
-            DestroyById(existingIdx);
-            _activeLights.Remove(client.Slot);
+            _wantOn.Remove(slot);
+            Destroy(slot);
             return false;
         }
+        _wantOn.Add(slot);
+        return true;
+    }
 
-        var pawn = client.PlayerPawn.Value;
-        if (pawn is null || !pawn.IsValid) return false;
+    /// <summary>
+    /// Called from the plugin's OnTick listener. Walks every player with flashlight ON
+    /// and re-positions their light to follow their head + view direction. Creates the
+    /// entity lazily on first tick.
+    /// </summary>
+    public void Tick()
+    {
+        if (_wantOn.Count == 0) return;
 
-        try
+        foreach (var slot in _wantOn.ToList())
         {
-            var light = Utilities.CreateEntityByName<CBaseEntity>("light_dynamic");
-            if (light is null) return false;
+            var client = Utilities.GetPlayerFromSlot(slot);
+            if (client is null || !client.IsValid || !client.PawnIsAlive)
+            {
+                Destroy(slot);
+                _wantOn.Remove(slot);
+                continue;
+            }
+            var pawn = client.PlayerPawn.Value;
+            if (pawn?.AbsOrigin is null || pawn.V_angle is null) continue;
 
-            // light_dynamic supports keyvalues for color/range/brightness/cone angles.
-            // Set via the generic entity-keyvalue path (AcceptInput "SetParent" handles parenting).
-            // Defaults give a warm, ~350u radius soft light.
+            COmniLight? entity;
+            if (_entities.TryGetValue(slot, out var existing) && existing.IsValid)
+            {
+                entity = existing;
+            }
+            else
+            {
+                entity = Utilities.CreateEntityByName<COmniLight>("light_omni2");
+                if (entity is null || !entity.IsValid)
+                {
+                    _logger.LogWarning("[Flashlight] light_omni2 create failed for {Name}", client.PlayerName);
+                    _wantOn.Remove(slot);
+                    continue;
+                }
+            }
 
-            var pos = pawn.AbsOrigin;
-            var ang = pawn.EyeAngles;
-            if (pos is null) return false;
+            // DirectLight=3 is the magic — without it the entity exists but emits nothing.
+            entity.DirectLight = 3;
 
-            // Spawn just above + in front of the player's center so the cone projects forward.
-            var spawnPos = new Vector(pos.X, pos.Y, pos.Z + 60);
-            light.Teleport(spawnPos, ang ?? new QAngle(), new Vector());
-            light.DispatchSpawn();
+            // Roughly head-height offset; reference plugin uses 64.03 standing / 46.03 crouched.
+            // We always use the standing offset for simplicity (light sits slightly above the
+            // head when crouched but still illuminates the area).
+            entity.Teleport(
+                new Vector(pawn.AbsOrigin.X, pawn.AbsOrigin.Y, pawn.AbsOrigin.Z + 64.03f),
+                pawn.V_angle,
+                pawn.AbsVelocity);
 
-            // Parent to the pawn so the light follows the player as they move.
-            // The light won't track pitch/yaw exactly (it stays at the spawn-time orientation),
-            // but for "lantern in your hand" effect that's fine.
-            light.AcceptInput("SetParent", pawn, client, "!activator");
-            light.AcceptInput("TurnOn");
+            entity.OuterAngle = 45f;
+            entity.Enabled = true;
+            entity.Color = Color.White;
+            entity.ColorTemperature = 6500;
+            entity.Brightness = 1f;
+            entity.Range = 5000f;
 
-            _activeLights[client.Slot] = light.Index;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[Flashlight] Toggle failed for {Name}", client.PlayerName);
-            return false;
+            // DispatchSpawn every tick — that's what the working reference does. On an already-
+            // spawned entity it's effectively a no-op + property re-apply.
+            entity.DispatchSpawn();
+
+            _entities[slot] = entity;
         }
     }
 
-    /// <summary>Drop the light for a single slot (death / disconnect).</summary>
     public void Cleanup(int slot)
     {
-        if (_activeLights.TryGetValue(slot, out var idx))
-        {
-            DestroyById(idx);
-            _activeLights.Remove(slot);
-        }
+        _wantOn.Remove(slot);
+        Destroy(slot);
     }
 
-    /// <summary>Drop every active light (round start / map change).</summary>
     public void CleanupAll()
     {
-        foreach (var idx in _activeLights.Values.ToList())
-            DestroyById(idx);
-        _activeLights.Clear();
+        foreach (var slot in _wantOn.ToList())
+            Destroy(slot);
+        _wantOn.Clear();
     }
 
-    private void DestroyById(uint entityIdx)
+    private void Destroy(int slot)
     {
-        try
+        if (_entities.TryGetValue(slot, out var ent))
         {
-            var ent = Utilities.GetEntityFromIndex<CBaseEntity>((int)entityIdx);
-            if (ent is { IsValid: true })
-                ent.AddEntityIOEvent("Kill", ent, null, "", 0.1f);
+            try { if (ent.IsValid) ent.Remove(); } catch { }
+            _entities.Remove(slot);
         }
-        catch { /* entity already gone */ }
     }
 }
