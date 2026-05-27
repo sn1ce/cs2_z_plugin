@@ -3,8 +3,14 @@
     // This is the bus-level volume knob: snd_toolvolume affects the audio bus our
     // EmitSound + "play <path>" emissions land on. Edit value, save, css_zreload →
     // every connected player gets the new value instantly. No reconnect needed.
+    // Effective audible volume on each bus = (this cvar) × (.vsndevts baked volume, if any)
+    //   ambient   = snd_toolvolume × 1.0  (play <path>, no baked attenuation)
+    //   scream    = snd_toolvolume × 0.6  (zm.MotherScream baked at 0.6 in .vsndevts)
+    //   bite      = snd_toolvolume × 0.7  (zm.Bite baked at 0.7)
+    //   idle      = snd_toolvolume × 1.0  (play <path>)
+    // At 0.3: ambient ~30%, scream ~18%, bite ~21%, idle ~30%. Tune via css_zreload.
     "ClientCvars": {
-        "snd_toolvolume": 0.1
+        "snd_toolvolume": 0.3
     },
 
     // Each event has either:

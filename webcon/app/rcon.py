@@ -52,22 +52,31 @@ class AsyncRcon:
         self._reader = self._writer = None
 
     async def exec(self, command: str) -> str:
-        """Send one command, read all response packets, return concatenated text."""
+        """Send one command, read all response packets, return concatenated text.
+
+        Termination uses the classic Source "send a follow-up empty
+        RESPONSE_VALUE packet" trick — the server's reply to that packet carries
+        a fixed sentinel body (\\x00\\x01\\x00\\x00). We collect every packet body
+        before the sentinel and concatenate.
+
+        We deliberately do NOT filter packets by `resp_id == cmd_id`: CS2 in
+        practice tags responses with the latest packet's id (often the dummy's
+        id), so filtering would drop the actual command output — including
+        `say` echoes, `status`, etc.
+        """
         if self._writer is None or self._reader is None:
             raise RconError("not connected")
         async with self._lock:
-            cmd_id = self._send(SERVERDATA_EXECCOMMAND, command)
-            # Send a dummy follow-up so we know when the real response ends:
-            # the server replies to packets in order, so when we see the dummy's
-            # echo we've collected everything for the real command.
-            dummy_id = self._send(SERVERDATA_RESPONSE_VALUE, "")
+            self._send(SERVERDATA_EXECCOMMAND, command)
+            # Empty RESPONSE_VALUE → the server echoes back a packet whose body
+            # is the literal "\x00\x01\x00\x00" sentinel; that's our "done".
+            self._send(SERVERDATA_RESPONSE_VALUE, "")
             chunks: list[str] = []
             while True:
-                resp_id, _, body = await self._recv()
-                if resp_id == dummy_id:
+                _, _, body = await self._recv()
+                if body == "\x00\x01\x00\x00":
                     break
-                if resp_id == cmd_id:
-                    chunks.append(body)
+                chunks.append(body)
             return "".join(chunks)
 
     def _send(self, packet_type: int, body: str) -> int:

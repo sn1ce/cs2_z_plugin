@@ -32,16 +32,44 @@
 
   // ----- generic helpers --------------------------------------------------
 
+  // Tracks whether the user has deliberately scrolled up inside a log pane.
+  // When true, new lines do NOT yank the view down — letting them read older
+  // history in peace. When the user scrolls back to the bottom themselves, the
+  // flag resets and auto-pin resumes (the "real terminal" pattern).
+  const _scrolledUp = new WeakMap();
+  const _BOTTOM_TOLERANCE = 4; // px — anything closer counts as "at bottom"
+
+  function _isAtBottom(el) {
+    return el.scrollTop + el.clientHeight >= el.scrollHeight - _BOTTOM_TOLERANCE;
+  }
+
+  function attachAutoScroll(targetEl) {
+    if (!targetEl || targetEl.__autoScrollWired) return;
+    targetEl.__autoScrollWired = true;
+    _scrolledUp.set(targetEl, false);
+    targetEl.addEventListener("scroll", () => {
+      // If they scrolled back down to (near) the bottom, re-enable auto-pin.
+      _scrolledUp.set(targetEl, !_isAtBottom(targetEl));
+    }, { passive: true });
+  }
+
   function appendLineTo(targetEl, kind, text) {
-    const atBottom = targetEl.scrollTop + targetEl.clientHeight >= targetEl.scrollHeight - 20;
+    attachAutoScroll(targetEl);
+    let appended = false;
     for (const raw of String(text).split("\n")) {
       if (!raw.trim()) continue;
       const span = document.createElement("span");
       span.className = `line ${kind}`;
       span.textContent = raw;
       targetEl.appendChild(span);
+      appended = true;
     }
-    if (atBottom) targetEl.scrollTop = targetEl.scrollHeight;
+    if (appended && !_scrolledUp.get(targetEl)) {
+      // Pin to bottom on every new line — `scrollTop = scrollHeight` is a
+      // synchronous, idempotent jump that also fires a scroll event; our
+      // listener guards against the flag flipping (we're at the bottom now).
+      targetEl.scrollTop = targetEl.scrollHeight;
+    }
   }
 
   function setStatus(connected) {
