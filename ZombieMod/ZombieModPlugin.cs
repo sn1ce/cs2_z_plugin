@@ -19,7 +19,7 @@ public sealed class ZombieModPlugin : BasePlugin
 {
     public override string ModuleName => "ZombieMod";
     public override string ModuleVersion => "0.1.0";
-    public override string ModuleAuthor => "ZombieMod contributors";
+    public override string ModuleAuthor => "sn1ce";
     public override string ModuleDescription => "Outbreak — classic infection/survival mode for CS2.";
 
     public static readonly PluginCapability<IZombieModAPI> Capability = new("zombiemod:core");

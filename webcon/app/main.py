@@ -324,11 +324,15 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("WEBCON_TOKEN is required")
     for cfg in load_servers(SERVERS_CONFIG):
         SERVERS[cfg.id] = cfg
-        b = LogBroadcaster(cfg.log_container)
-        b.start()
-        BROADCASTERS[cfg.id] = b
+        # Remote servers (e.g. cs2-azure on the public internet) have no docker
+        # container we can `docker logs` against — leave the log_container blank
+        # in servers.json and we skip the broadcaster entirely.
+        if cfg.log_container:
+            b = LogBroadcaster(cfg.log_container)
+            b.start()
+            BROADCASTERS[cfg.id] = b
         log.info("registered server %s (%s:%d, log=%s)",
-                 cfg.id, cfg.rcon_host, cfg.rcon_port, cfg.log_container)
+                 cfg.id, cfg.rcon_host, cfg.rcon_port, cfg.log_container or "<remote>")
     yield
     await asyncio.gather(*(b.stop() for b in BROADCASTERS.values()), return_exceptions=True)
 
@@ -574,14 +578,17 @@ async def api_servers_update(
         existing.rcon_host = data["rcon_host"]
         existing.rcon_port = data["rcon_port"]
 
-        # If the log container changed, swap the broadcaster.
+        # If the log container changed, swap the broadcaster. Empty string ⇒
+        # remote server, no docker logs available — leave BROADCASTERS without
+        # an entry for this id (the WS handler handles a missing broadcaster).
         old_b: LogBroadcaster | None = None
         if data["log_container"] != existing.log_container:
             old_b = BROADCASTERS.pop(existing.id, None)
             existing.log_container = data["log_container"]
-            new_b = LogBroadcaster(existing.log_container)
-            new_b.start()
-            BROADCASTERS[existing.id] = new_b
+            if existing.log_container:
+                new_b = LogBroadcaster(existing.log_container)
+                new_b.start()
+                BROADCASTERS[existing.id] = new_b
 
         try:
             _persist_servers()
@@ -651,10 +658,25 @@ async def _ws_auth_or_close(ws: WebSocket) -> bool:
     return True
 
 
+# Connect timeout for opening a console RCON session. Kept tight enough that a
+# dead remote host (e.g. Azure box powered off, public-internet packet loss)
+# doesn't stall the WebSocket handshake for the user.
+_RCON_CONNECT_TIMEOUT = 5.0
+
+
 async def _open_rcon(ws: WebSocket, cfg: ServerCfg) -> AsyncRcon | None:
     rcon = AsyncRcon(cfg.rcon_host, cfg.rcon_port, cfg.password)
     try:
-        await rcon.connect()
+        await asyncio.wait_for(rcon.connect(), timeout=_RCON_CONNECT_TIMEOUT)
+    except asyncio.TimeoutError:
+        await ws.send_json({"type": "error",
+                            "text": f"[{cfg.id}] RCON connect timed out after "
+                                    f"{_RCON_CONNECT_TIMEOUT:.0f}s ({cfg.rcon_host}:{cfg.rcon_port})"})
+        try:
+            await rcon.close()
+        except Exception:
+            pass
+        return None
     except Exception as exc:
         await ws.send_json({"type": "error", "text": f"[{cfg.id}] RCON connect failed: {exc}"})
         return None
@@ -682,13 +704,16 @@ async def ws_one_server(ws: WebSocket) -> None:
         await ws.close()
         return
 
-    broadcaster = BROADCASTERS[cfg.id]
-    log_q = broadcaster.subscribe()
+    # Remote servers have no docker container to tail; their console runs
+    # without a `log` stream and only renders RCON responses.
+    broadcaster = BROADCASTERS.get(cfg.id)
+    log_q = broadcaster.subscribe() if broadcaster is not None else None
 
     # Track this socket so DELETE /api/servers/{id} can close it cleanly (4404).
     ACTIVE_WS.setdefault(cfg.id, set()).add(ws)
 
     async def pump_logs():
+        assert log_q is not None
         try:
             while True:
                 line = await log_q.get()
@@ -696,7 +721,10 @@ async def ws_one_server(ws: WebSocket) -> None:
         except (WebSocketDisconnect, RuntimeError):
             pass
 
-    log_task = asyncio.create_task(pump_logs())
+    log_task = asyncio.create_task(pump_logs()) if log_q is not None else None
+    if log_task is None:
+        await ws.send_json({"type": "info",
+                            "text": f"[{cfg.id}] remote server — no docker log stream attached"})
 
     try:
         while True:
@@ -724,8 +752,10 @@ async def ws_one_server(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        log_task.cancel()
-        broadcaster.unsubscribe(log_q)
+        if log_task is not None:
+            log_task.cancel()
+        if broadcaster is not None and log_q is not None:
+            broadcaster.unsubscribe(log_q)
         sessions = ACTIVE_WS.get(cfg.id)
         if sessions is not None:
             sessions.discard(ws)
