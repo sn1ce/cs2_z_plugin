@@ -1,4 +1,6 @@
+using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
 using ZombieMod.Config;
 
@@ -21,6 +23,44 @@ public sealed class WeaponService
 
     public WeaponConfig? FindByEntity(string entityName)
         => _config.WeaponsByEntity.TryGetValue(entityName, out var w) ? w : null;
+
+    /// <summary>
+    /// Keeps every alive player's guns topped to their pinned reserve (2 magazines by default,
+    /// or <c>cfg.Reserve</c> if set). Reserve ammo only ever decreases on reload, so re-topping
+    /// here means spare ammo effectively never drains to 0 while still showing a finite "2 spare
+    /// mags" — no sv_infinite_ammo and no sv_cheats required. Called on a throttle from OnTick;
+    /// the "only write when below target" guard makes it a cheap no-op except right after a reload.
+    /// </summary>
+    public void TickRefillReserves()
+    {
+        foreach (var player in Utilities.GetPlayers())
+        {
+            if (player is null || !player.IsValid || !player.PawnIsAlive) continue;
+            if (player.Team is not (CsTeam.CounterTerrorist or CsTeam.Terrorist)) continue;
+            var ws = player.PlayerPawn.Value?.WeaponServices;
+            if (ws is null) continue;
+
+            foreach (var handle in ws.MyWeapons)
+            {
+                if (handle.Value is not { IsValid: true }) continue;
+                var w = new CCSWeaponBase(handle.Value.Handle);
+                if (!w.IsValid || w.VData is null) continue;
+                if (w.DesignerName.Contains("knife", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!_config.WeaponsByEntity.TryGetValue(w.DesignerName, out var cfg)) continue;
+
+                var clipTarget = cfg.Clip > 0 ? cfg.Clip : w.VData.MaxClip1;
+                var target = cfg.Reserve > 0 ? cfg.Reserve : clipTarget * 2;
+                if (target <= 0) continue;
+
+                if (w.VData.PrimaryReserveAmmoMax < target) w.VData.PrimaryReserveAmmoMax = target;
+                if (w.ReserveAmmo[0] < target)
+                {
+                    w.ReserveAmmo[0] = target;
+                    Utilities.SetStateChanged(w, "CBasePlayerWeapon", "m_pReserveAmmo");
+                }
+            }
+        }
+    }
 
     public bool IsRestricted(string entityName)
         => _config.WeaponsByEntity.TryGetValue(entityName, out var w) && w.Restrict;

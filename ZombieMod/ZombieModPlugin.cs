@@ -38,6 +38,9 @@ public sealed class ZombieModPlugin : BasePlugin
     internal KnockbackProviderDetector KnockbackDetector { get; private set; } = null!;
     internal ZombieModApi Api { get; private set; } = null!;
 
+    // Throttle counter for the OnTick reserve-ammo refill (acts every 16th tick ≈ 4×/sec).
+    private int _ammoRefillTick;
+
     public override void Load(bool hotReload)
     {
         var configDir = ResolveConfigDir();
@@ -161,8 +164,18 @@ public sealed class ZombieModPlugin : BasePlugin
                     if (weapon.VData.MaxClip1 < clipTarget) weapon.VData.MaxClip1 = clipTarget;
                     if (weapon.Clip1 < clipTarget) weapon.Clip1 = clipTarget;
                 }
-                // Reserve handled by sv_infinite_ammo 2 — see RequiredCvars note.
                 Utilities.SetStateChanged(weapon, "CBasePlayerWeapon", "m_iClip1");
+
+                // Reserve (spare) ammo pinned to 2 magazines. The engine clamps reserve to the
+                // weapon's VData cap, so raise that cap first, then fill. Weapons.TickRefillReserves
+                // keeps it topped after reloads so it never drains to 0 (no sv_infinite_ammo / cheats).
+                var reserveTarget = cfg.Reserve > 0 ? cfg.Reserve : clipTarget * 2;
+                if (reserveTarget > 0)
+                {
+                    weapon.VData.PrimaryReserveAmmoMax = reserveTarget;
+                    weapon.ReserveAmmo[0] = reserveTarget;
+                    Utilities.SetStateChanged(weapon, "CBasePlayerWeapon", "m_pReserveAmmo");
+                }
             });
         });
 
@@ -185,10 +198,12 @@ public sealed class ZombieModPlugin : BasePlugin
         // Per-tick: re-position any active flashlights to follow their owners.
         // Cheap when nobody has a flashlight on (early-return on _wantOn.Count == 0).
         // Classes.Tick handles molotov-slow expiry (restores class speed when no longer burning).
+        // Weapons.TickRefillReserves (throttled to ~4x/sec) keeps spare ammo pinned at 2 mags.
         RegisterListener<OnTick>(() =>
         {
             Flashlight.Tick();
             Classes.Tick();
+            if (++_ammoRefillTick >= 16) { _ammoRefillTick = 0; Weapons.TickRefillReserves(); }
         });
 
         // sv_cheats has to stay on for sv_infinite_ammo (cheat-protected), but that means
@@ -219,11 +234,13 @@ public sealed class ZombieModPlugin : BasePlugin
             return HookResult.Continue;
         });
 
-        // mp_restartgame intercept (defense layer 1 — command listener). May not fire
-        // for engine-issued commands; logged so we can confirm.
-        AddCommandListener("mp_restartgame", (_, info) =>
+        // mp_restartgame intercept: resets infection state the instant the command is issued
+        // (before the engine's restart delay), so a player who runs it mid-game doesn't linger
+        // as a zombie. The subsequent EventRoundStart also calls OnRoundStart, so this is a
+        // belt-and-suspenders reset — but it only fires on the explicit command, never during
+        // normal round flow, so it can't kill a live first-infection timer.
+        AddCommandListener("mp_restartgame", (_, _) =>
         {
-            Logger.LogInformation("[Restart] mp_restartgame command listener fired: {Args}", info.ArgString);
             Infection.OnRoundStart();
             return HookResult.Continue;
         });
@@ -260,32 +277,17 @@ public sealed class ZombieModPlugin : BasePlugin
     [GameEventHandler]
     public HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
     {
-        Logger.LogInformation("[Restart] EventRoundStart fired");
+        // Fires on every round start, INCLUDING the round restart that mp_restartgame
+        // triggers — so this one handler resets infection state for both normal rounds and
+        // restarts. (An earlier "defense-in-depth" set of extra restart hooks — CsPreRestart,
+        // RoundPrestart, BeginNewMatch, AnnounceMatchStart — was removed: they fired AFTER
+        // OnRoundFreezeEnd scheduled the first-infection timer and each called OnRoundStart →
+        // KillRoundTimers(), nuking the timer so nobody ever got infected.)
         Infection.OnRoundStart();
         Props.CleanupAll();
         Flashlight.CleanupAll();
         return HookResult.Continue;
     }
-
-    // Defense-in-depth: any of these events firing on mp_restartgame triggers the same
-    // idempotent state reset (clears IsInfected for all players + force-switches to CT).
-    // We don't know up-front which one CS2/CSSharp actually delivers in this build, so we
-    // listen on all of them and log so the next time the user reports a regression we can
-    // see in the log which path ran.
-    [GameEventHandler] public HookResult OnCsPreRestart(EventCsPreRestart @event, GameEventInfo info)
-        { Logger.LogInformation("[Restart] EventCsPreRestart"); Infection.OnRoundStart(); return HookResult.Continue; }
-
-    [GameEventHandler] public HookResult OnRoundPreStart(EventRoundPrestart @event, GameEventInfo info)
-        { Logger.LogInformation("[Restart] EventRoundPrestart"); Infection.OnRoundStart(); return HookResult.Continue; }
-
-    [GameEventHandler] public HookResult OnBeginNewMatch(EventBeginNewMatch @event, GameEventInfo info)
-        { Logger.LogInformation("[Restart] EventBeginNewMatch"); Infection.OnRoundStart(); return HookResult.Continue; }
-
-    [GameEventHandler] public HookResult OnCsMatchEndRestart(EventCsMatchEndRestart @event, GameEventInfo info)
-        { Logger.LogInformation("[Restart] EventCsMatchEndRestart"); Infection.OnRoundStart(); return HookResult.Continue; }
-
-    [GameEventHandler] public HookResult OnAnnounceMatchStart(EventRoundAnnounceMatchStart @event, GameEventInfo info)
-        { Logger.LogInformation("[Restart] EventRoundAnnounceMatchStart"); Infection.OnRoundStart(); return HookResult.Continue; }
 
     [GameEventHandler]
     public HookResult OnRoundFreezeEnd(EventRoundFreezeEnd @event, GameEventInfo info)

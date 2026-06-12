@@ -14,6 +14,7 @@ public sealed record WeaponConfig
     /// <summary>Magazine size override. 0 = auto-double the vanilla CS2 MaxClip1.</summary>
     public int Clip { get; init; }
 
-    /// <summary>Reserve ammo override. 0 = leave vanilla CS2 default.</summary>
+    /// <summary>Reserve (spare) ammo override. 0 = default to exactly 2 spare magazines
+    /// (2 × the effective mag size). Requires sv_infinite_ammo 0, else reserve is infinite.</summary>
     public int Reserve { get; init; }
 }

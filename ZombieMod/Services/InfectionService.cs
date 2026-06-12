@@ -672,37 +672,48 @@ public sealed class InfectionService
 
     private static void StripWeapons(CCSPlayerController client, bool keepKnife)
     {
-        // Pattern: set as active, DropActiveWeapon (CS2 ejects it in the player's facing
-        // direction, giving some natural separation so the infected doesn't immediately
-        // re-pick-up). We deliberately do NOT schedule a Kill event — the weapon should
-        // persist on the ground for survivors to collect later. Direct w.Remove() would
-        // crash CS2 with "WriteEnterPVS: GetEntServerClass failed" anyway.
+        // Drop every non-knife weapon to the ground (survivors can grab the loot later; we
+        // deliberately don't Kill the entities — and direct w.Remove() crashes CS2 with
+        // "WriteEnterPVS: GetEntServerClass failed" anyway).
+        //
+        // The trick: DropActiveWeapon ejects the *deployed* weapon, and the engine needs a
+        // frame to actually deploy a weapon after you switch to it. The old code did
+        // "set active + DropActiveWeapon" in a tight same-frame loop, so only the
+        // already-deployed gun dropped — a holstered pistol survived and the zombie kept it.
+        // Fix: process ONE weapon per frame. Each frame, if a gun is deployed, drop it;
+        // otherwise switch to a holstered gun so it deploys for next frame's drop. Repeat
+        // until only the knife remains (capped so we can never loop forever).
         var slot = client.Slot;
-        Server.NextFrame(() =>
+        const int maxFrames = 12;
+        void DropPass(int framesLeft)
         {
+            if (framesLeft <= 0) return;
             var fresh = Utilities.GetPlayerFromSlot(slot);
             if (fresh is null || !fresh.IsValid) return;
             var pawn = fresh.PlayerPawn.Value;
             if (pawn?.WeaponServices is null) return;
 
-            var weapons = pawn.WeaponServices.MyWeapons.ToList();
-            foreach (var handle in weapons)
-            {
-                var w = handle.Value;
-                if (w is null || !w.IsValid) continue;
-                if (keepKnife && w.DesignerName.Contains("knife", StringComparison.OrdinalIgnoreCase)) continue;
+            static bool IsKnife(CBasePlayerWeapon w)
+                => w.DesignerName.Contains("knife", StringComparison.OrdinalIgnoreCase);
 
-                try
-                {
-                    pawn.WeaponServices.ActiveWeapon.Raw = handle.Raw;
-                    fresh.DropActiveWeapon();
-                }
-                catch
-                {
-                    // Entity may be mid-destruction by the engine — tolerate.
-                }
+            var remaining = pawn.WeaponServices.MyWeapons
+                .Where(h => h.Value is { IsValid: true } w && !(keepKnife && IsKnife(w)))
+                .ToList();
+            if (remaining.Count == 0) return;   // only the knife is left — done
+
+            try
+            {
+                var active = pawn.WeaponServices.ActiveWeapon.Value;
+                if (active is { IsValid: true } && !(keepKnife && IsKnife(active)))
+                    fresh.DropActiveWeapon();                              // deployed gun → eject it
+                else
+                    pawn.WeaponServices.ActiveWeapon.Raw = remaining[0].Raw; // deploy a gun for next frame
             }
-        });
+            catch { /* entity mid-teardown — tolerate, retry next frame */ }
+
+            Server.NextFrame(() => DropPass(framesLeft - 1));
+        }
+        Server.NextFrame(() => DropPass(maxFrames));
     }
 
     private void FakeInfectKillfeed(CCSPlayerController victim, CCSPlayerController attacker)

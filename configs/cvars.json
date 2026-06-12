@@ -34,12 +34,11 @@
         // Round time (minutes).
         "mp_roundtime 4",
 
-        // ── Cheats + ammo (ORDER-SENSITIVE) ──────────────────────────────────────
-        // sv_cheats MUST come before any cheat-protected cvar below, otherwise the
-        // engine rejects them as cheat-protected at apply time.
-        "sv_cheats 1",
-        // Infinite reserve, mag still depletes → reload mechanic preserved. Cheat-protected.
-        "sv_infinite_ammo 2",
+        // ── Cheats ───────────────────────────────────────────────────────────────
+        // sv_cheats OFF. The plugin sets each weapon's mag + 2-spare-mag reserve directly
+        // via schema writes (no cheat-protected cvars needed), so there's no reason to keep
+        // cheats on — this also blocks noclip/god/etc. for everyone at the engine level.
+        "sv_cheats 0",
 
         // ── Bots ─────────────────────────────────────────────────────────────────
         // bot_quota 2 = default testing buddies on solo. Override the image's
