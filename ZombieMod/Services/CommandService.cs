@@ -48,6 +48,50 @@ public sealed class CommandService
         _flashlight = flashlight;
     }
 
+    public void HandleBuy(CCSPlayerController? caller, CommandInfo info) => OpenBuyMenu(caller, null);
+
+    /// <summary>
+    /// Weapon-buy menu (!buy). Works anywhere on the map — the mod's own purchase path
+    /// (WeaponService.TryPurchase) doesn't depend on map buy-zone entities, unlike CS2's
+    /// native B menu which fails with "not in a buy zone" on zombie/workshop maps that ship
+    /// no buyzones. Ordered by weapon slot then price; restricted weapons and knives are hidden.
+    /// </summary>
+    private void OpenBuyMenu(CCSPlayerController? caller, string? focusKey)
+    {
+        if (caller is null || !caller.IsValid || Host is null) return;
+        if (_infection.IsClientInfected(caller))
+        {
+            caller.PrintToChat(" \x04[ZombieMod]\x01 Zombies are melee-only — no buying.");
+            return;
+        }
+
+        var account = caller.InGameMoneyServices?.Account ?? 0;
+        var menu = new WasdMenu($"Buy Weapons — You have ${account}", Host);
+
+        var ordered = _config.Weapons
+            .Where(w => !w.Value.Restrict
+                        && !w.Value.WeaponEntity.Contains("knife", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(w => w.Value.WeaponSlot)
+            .ThenBy(w => w.Value.Price)
+            .ToList();
+        var startIdx = 0;
+
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var (key, weapon) = ordered[i];
+            if (focusKey is not null && key == focusKey) startIdx = i;
+
+            var capturedKey = key;
+            menu.AddItem($"{weapon.WeaponName} — ${weapon.Price}", (client, _) =>
+            {
+                _weapons.TryPurchase(client, capturedKey);   // handles all validation + chat feedback
+                // Reopen on the same item so rapid re-buys don't snap the cursor to the top.
+                Host?.AddTimer(0.1f, () => OpenBuyMenu(client, capturedKey));
+            });
+        }
+        menu.Display(caller, startIdx);
+    }
+
     public void HandleProp(CCSPlayerController? caller, CommandInfo info) => OpenPropMenu(caller, null);
 
     private void OpenPropMenu(CCSPlayerController? caller, string? focusKey)

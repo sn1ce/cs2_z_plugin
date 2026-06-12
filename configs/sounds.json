@@ -35,12 +35,14 @@
     // play <path> at full volume. Workaround: lower the source .wav amplitude in Audacity
     // if you eventually want it quieter; or wait for an updated EmitSoundVolumeFix +
     // change the .vsndevts type to cs_player_footstep (positional).
+    // DISABLED — the play-<path> fallback emits at full volume (snd_toolvolume × 1.0) which
+    // is far too loud, and the workshop .vsndevts ambient event never produced audio. Empty
+    // Files + empty SoundEvent → Broadcast goes silent (SoundService logs "No Files, silent").
+    // Re-add a path here (or fix the .vsndevts) to bring it back.
     "round_ambient": {
         "SoundEvent": "",
         "Volume": 1.0,
-        "Files": [
-            "sounds/zombie_event_ambient_sound.vsnd"
-        ]
+        "Files": []
     },
 
     // Patient Zero identified at round start — engine picks one of the 2 vsnd_files in the

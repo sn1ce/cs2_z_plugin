@@ -483,6 +483,13 @@ public sealed class ZombieModPlugin : BasePlugin
     public void Cmd_ZHelp(CCSPlayerController? caller, CommandInfo info)
         => Commands.HandleZHelp(caller, info);
 
+    [ConsoleCommand("css_buy", "Open the weapon-buy menu (works anywhere on the map).")]
+    [ConsoleCommand("css_guns", "Open the weapon-buy menu.")]
+    [ConsoleCommand("css_shop", "Open the weapon-buy menu.")]
+    [CommandHelper(0, "", CommandUsage.CLIENT_ONLY)]
+    public void Cmd_Buy(CCSPlayerController? caller, CommandInfo info)
+        => Commands.HandleBuy(caller, info);
+
     [ConsoleCommand("css_prop", "Open the prop-spawn menu (costs in-game cash).")]
     [CommandHelper(0, "", CommandUsage.CLIENT_ONLY)]
     public void Cmd_Prop(CCSPlayerController? caller, CommandInfo info)
